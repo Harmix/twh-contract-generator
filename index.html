@@ -4,7 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TWH — генератор договора поставки</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<!-- JSZip 3.10.1 лежит рядом, а не на CDN: приложение работает офлайн и не зависит
+     от доступности внешних сетей у клиента. MIT / GPLv3, автор Stuart Knightley. -->
+<script src="jszip.min.js"></script>
 <script src="rules.js"></script>
 <script src="engine.js"></script>
 <script src="docx.js"></script>
@@ -319,7 +321,7 @@
   /* ---------- DOCX ---------- */
   async function downloadDocx(){
     if (typeof JSZip === 'undefined'){
-      alert('Библиотека JSZip не загрузилась (при первом открытии нужен интернет). Используйте «Печать / PDF».');
+      alert('Файл jszip.min.js не найден рядом с index.html. Положите его в ту же папку или используйте «Печать / PDF».');
       return;
     }
     const built = window.__lastBuild;

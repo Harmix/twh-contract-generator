@@ -58,8 +58,14 @@ const grain = E.derive(s({ category: 'grain' }));
 ok('зерно → фитосанитарный обязателен', ids(grain).includes('5.1.6'));
 
 group('Сертификат происхождения по маршруту');
-ok('СНГ → СТ-1', E.derive(s({ route: 'RU' })).documents.find(d => d.id === '5.1.4').ru.includes('СТ-1'));
-ok('дальнее зарубежье → Form A', E.derive(s({ route: 'OTHER' })).documents.find(d => d.id === '5.1.4').ru.includes('Form A'));
+const cert = st => E.derive(s(st)).documents.find(d => d.id === '5.1.4');
+ok('СНГ → СТ-1', cert({ route: 'RU' }).ru.includes('СТ-1'));
+ok('дальнее зарубежье → Form A', cert({ route: 'OTHER' }).ru.includes('Form A'));
+ok('ЕАЭС (РФ): по запросу Покупателя', cert({ route: 'RU' }).optional === true && cert({ route: 'RU' }).ru.includes('по запросу'));
+ok('ЕАЭС (KG): по запросу Покупателя', cert({ route: 'KG' }).optional === true);
+ok('Узбекистан: обязателен', cert({ route: 'UZ' }).optional === false && !cert({ route: 'UZ' }).ru.includes('по запросу'));
+ok('дальнее зарубежье: обязателен', cert({ route: 'OTHER' }).optional === false);
+ok('EN тоже помечен', cert({ route: 'RU' }).en.includes('Buyer’s request'));
 
 group('Транспорт');
 ok('авто → CMR, без коносамента', ids(E.derive(s({ transport: 'road' }))).includes('5.1.3') && !ids(E.derive(s({ transport: 'road' }))).includes('5.1.3b'));
@@ -97,11 +103,12 @@ ok('сумма > 50k → совет про аккредитив', E.derive(s({ q
 ok('пищёвка без срока годности → предупреждение', E.derive(s({ shelf_life_value: '' })).warnings.some(x => x.includes('срок годности')));
 ok('DAP внутри ЕАЭС → пояснение', E.derive(s({ route: 'RU' })).warnings.some(x => x.includes('ЕАЭС')));
 
-group('Открытые вопросы к Бекмырзе');
-ok('ЕАЭС поднимает вопрос по СТ-1', E.derive(s({ route: 'RU' })).questions.some(q => q.id === 'st1_eaeu'));
-ok('не-ЕАЭС не поднимает', !E.derive(s({ route: 'UZ' })).questions.some(q => q.id === 'st1_eaeu'));
-ok('вопрос про EN текст всегда виден', E.derive(s()).questions.some(q => q.id === 'en_text'));
-ok('DAP поднимает вопрос про страховку', E.derive(s({ incoterms: 'DAP' })).questions.some(q => q.id === 'insurance_dap'));
+group('Открытые и закрытые вопросы');
+ok('вопрос про EN текст всё ещё открыт', E.derive(s()).questions.some(q => q.id === 'en_text'));
+ok('решённые вопросы больше не показываются',
+  !E.derive(s({ route: 'RU' })).questions.some(q => ['st1_eaeu', 'eaeu_customs', 'vat_export', 'insurance_dap'].includes(q.id)));
+ok('решения зафиксированы в rules.settled', RULES.settled.length === 4);
+ok('у каждого решения есть дата', RULES.settled.every(x => /^\d{4}-\d{2}-\d{2}$/.test(x.date)));
 
 group('Даты');
 ok('RU: 01 сентября 2026 г.', E.formatDate('2026-09-01', 'ru') === '01 сентября 2026 г.', E.formatDate('2026-09-01', 'ru'));
@@ -117,9 +124,13 @@ ok('срок годности вместо гарантии для пищёвк�
 ok('гарантия вместо срока годности для промтоваров',
   E.buildContract(s({ category: 'other', warranty_months: 12 })).blocks
     .map(b => b.ru || '').join(' ').includes('Гарантийный срок'));
-ok('ЕАЭС: в ст. 4.2 нет растаможки ввоза',
+ok('ЕАЭС: в ст. 4.2 формулировка про единую таможенную территорию',
   E.buildContract(s({ route: 'RU' })).blocks.map(b => b.ru || '').join(' ')
-    .includes('таможенное оформление ввоза не производится'));
+    .includes('единой таможенной территории Евразийского экономического союза'));
+ok('ЕАЭС: слова «Покупатель растаможивает» нет',
+  !/ввоза обеспечивает Покупатель/.test(E.buildContract(s({ route: 'RU' })).blocks.map(b => b.ru || '').join(' ')));
+ok('вне ЕАЭС растаможка ввоза осталась на Покупателе',
+  /ввоза обеспечивает Покупатель/.test(E.buildContract(s({ route: 'UZ' })).blocks.map(b => b.ru || '').join(' ')));
 ok('условия оплаты 30/70 попали в текст', text.includes('30% (тридцать процентов)'));
 ok('приложения 1 и 2 есть', text.includes('Приложение №1') && text.includes('Приложение №2'));
 ok('приложение 3 по умолчанию отсутствует', !text.includes('Приложение №3 —'));

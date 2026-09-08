@@ -135,8 +135,13 @@ function derive(state) {
       const doc = { ...d };
       if (d.id === '5.1.4') {
         const form = route.cert_origin === 'FORM_A' ? 'Form A' : 'СТ-1';
-        doc.ru = `Сертификат происхождения (${form})`;
-        doc.en = `Certificate of Origin (${form === 'СТ-1' ? 'CT-1' : 'Form A'})`;
+        /* Внутри ЕАЭС сертификат происхождения предоставляется по запросу Покупателя,
+           за пределами ЕАЭС обязателен. Решение от 06.09.2026. */
+        doc.optional = route.eaeu;
+        doc.ru = `Сертификат происхождения (${form})` +
+          (doc.optional ? ' — по запросу Покупателя' : '');
+        doc.en = `Certificate of Origin (${form === 'СТ-1' ? 'CT-1' : 'Form A'})` +
+          (doc.optional ? ' — at the Buyer’s request' : '');
       }
       return doc;
     });
@@ -286,10 +291,10 @@ function buildContract(state) {
   P(`4.1. Поставка осуществляется на условиях ${state.incoterms} (Incoterms® 2020). ${d.incoterms.carrier_ru}.`,
     `4.1. Delivery is made on ${state.incoterms} terms (Incoterms® 2020). ${d.incoterms.carrier_en}.`);
   P(`4.2. Таможенное оформление вывоза обеспечивает ${d.exportCustoms === 'supplier' ? 'Поставщик' : 'Покупатель'}. ${d.importCustoms === 'none'
-      ? 'Поставка осуществляется в пределах таможенной территории ЕАЭС, таможенное оформление ввоза не производится.'
+      ? 'Таможенное оформление ввоза не требуется: поставка осуществляется в пределах единой таможенной территории Евразийского экономического союза.'
       : 'Таможенное оформление ввоза обеспечивает ' + (d.importCustoms === 'supplier' ? 'Поставщик.' : 'Покупатель.')}`,
     `4.2. Export clearance is arranged by the ${d.exportCustoms === 'supplier' ? 'Supplier' : 'Buyer'}. ${d.importCustoms === 'none'
-      ? 'Delivery takes place within the customs territory of the EAEU; no import clearance is required.'
+      ? 'No import clearance is required: delivery takes place within the single customs territory of the Eurasian Economic Union.'
       : 'Import clearance is arranged by the ' + (d.importCustoms === 'supplier' ? 'Supplier.' : 'Buyer.')}`);
   P('4.3. Поставка партиями допускается только с письменного согласия Покупателя.',
     '4.3. Partial shipments are permitted only with the Buyer’s written consent.');

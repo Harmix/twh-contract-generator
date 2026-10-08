@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TWH — генератор договора поставки</title>
+<!-- JSZip 3.10.1 лежит рядом, а не на CDN: приложение работает офлайн и не зависит
+     от доступности внешних сетей у клиента. MIT / GPLv3, автор Stuart Knightley. -->
+<script src="jszip.min.js"></script>
+<script src="rules.js"></script>
+<script src="engine.js"></script>
+<script src="docx.js"></script>
+<style>
+  :root{
+    --bg:#f6f5f3; --panel:#fff; --ink:#1a1a1a; --muted:#6b6b6b;
+    --line:#e2e0dc; --accent:#1f4f3f; --warn:#8a5a00; --warn-bg:#fdf6e6;
+    --q:#2a4d7a; --q-bg:#eef3fa;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  header{position:sticky;top:0;z-index:10;background:var(--panel);border-bottom:1px solid var(--line);
+    padding:10px 18px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.01em}
+  header .ver{color:var(--muted);font-size:12px}
+  header .sp{flex:1}
+  button{font:inherit;padding:7px 13px;border-radius:7px;border:1px solid var(--line);
+    background:#fff;cursor:pointer}
+  button:hover{border-color:#c9c6c0}
+  button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  button.primary:hover{background:#183c30}
+  main{display:grid;grid-template-columns:minmax(360px,440px) 1fr;gap:18px;padding:18px;align-items:start}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:16px}
+  fieldset{border:0;padding:0;margin:0 0 20px}
+  legend{font-weight:600;font-size:12px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:9px;padding:0}
+  label{display:block;margin-bottom:10px;font-size:13px;color:var(--muted)}
+  label span.req{color:#a33}
+  input,select,textarea{width:100%;font:inherit;padding:7px 9px;margin-top:3px;
+    border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink)}
+  input:focus,select:focus,textarea:focus{outline:2px solid #cfe0d9;border-color:var(--accent)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  .check{display:flex;gap:8px;align-items:flex-start;margin-bottom:10px;font-size:13px;color:var(--ink)}
+  .check input{width:auto;margin-top:2px}
+  .hint{font-size:12px;color:var(--muted);margin-top:-4px;margin-bottom:10px}
+  .notice{border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:13px;line-height:1.45}
+  .notice.warn{background:var(--warn-bg);border:1px solid #f0dfb4;color:var(--warn)}
+  .notice.q{background:var(--q-bg);border:1px solid #d3e0ef;color:var(--q)}
+  .notice b{font-weight:600}
+  .derived{font-size:13px;background:#f2f5f3;border:1px solid #dde6e1;border-radius:8px;padding:10px 12px;margin-bottom:14px}
+  .derived div{margin:3px 0}
+  .derived .k{color:var(--muted)}
+  .doc{background:#fff;border:1px solid var(--line);border-radius:11px;padding:34px 40px;
+    font-family:Georgia,"Times New Roman",serif;font-size:14px;line-height:1.55;max-width:940px}
+  .doc h2.title{text-align:center;font-size:17px;margin:0 0 4px}
+  .doc h3{font-size:14px;margin:22px 0 7px;font-weight:700}
+  .doc p{margin:0 0 9px;text-align:justify}
+  .doc .en{color:#7a7a7a;font-style:italic;font-size:13px;margin-top:-5px;margin-bottom:11px}
+  .doc table{border-collapse:collapse;width:100%;margin:8px 0 14px;font-size:13px}
+  .doc td{border:1px solid #cfcdc8;padding:5px 8px;vertical-align:top}
+  .doc td:first-child{color:#555;width:34%}
+  .doc table.grid td:first-child{width:auto}
+  .doc hr.pb{border:0;border-top:1px dashed #cfcdc8;margin:26px 0}
+  .excluded{font-size:12px;color:var(--muted);margin-top:-6px}
+  @media (max-width:1000px){main{grid-template-columns:1fr}}
+  @media print{
+    header,.panel.form,.notice,.derived{display:none!important}
+    body{background:#fff}
+    main{display:block;padding:0}
+    .doc{border:0;border-radius:0;padding:0;max-width:none}
+    .doc hr.pb{border:0;page-break-after:always;margin:0}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>TWH — генератор договора поставки</h1>
+  <span class="ver">шаблон v1.1 · прототип 0.1</span>
+  <span class="sp"></span>
+  <a href="deal/" style="font-size:13px;color:#1f4f3f">Сделка целиком →</a>
+  <button id="btn-example">Заполнить примером</button>
+  <button id="btn-en">EN текст: вкл</button>
+  <button id="btn-print">Печать / PDF</button>
+  <button id="btn-docx" class="primary">Скачать DOCX</button>
+</header>
+
+<main>
+  <section class="panel form" id="form">
+
+    <fieldset>
+      <legend>Договор</legend>
+      <div class="row3">
+        <label>Год<input id="contract_year" type="number" value="2026"></label>
+        <label>Номер<input id="contract_seq" type="number" value="1"></label>
+        <label>Дата<input id="date" type="date"></label>
+      </div>
+      <label>Место заключения<input id="place" value="Алматы"></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Поставщик (экспортёр, Казахстан)</legend>
+      <label>Наименование<input id="supplier_name"></label>
+      <div class="row">
+        <label>Страна<input id="supplier_country" value="Казахстан"></label>
+        <label>БИН / рег. №<input id="supplier_reg"></label>
+      </div>
+      <div class="row">
+        <label>Представитель<input id="supplier_rep"></label>
+        <label>Действует на основании<input id="supplier_basis" value="Устава"></label>
+      </div>
+      <label>Адрес<input id="supplier_address"></label>
+      <div class="row3">
+        <label>Банк<input id="supplier_bank"></label>
+        <label>IBAN<input id="supplier_iban"></label>
+        <label>SWIFT<input id="supplier_swift"></label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Покупатель (импортёр)</legend>
+      <label>Наименование<input id="buyer_name"></label>
+      <div class="row">
+        <label>Страна<input id="buyer_country"></label>
+        <label>Рег. № / ИНН<input id="buyer_reg"></label>
+      </div>
+      <div class="row">
+        <label>Представитель<input id="buyer_rep"></label>
+        <label>Действует на основании<input id="buyer_basis" value="Устава"></label>
+      </div>
+      <label>Адрес<input id="buyer_address"></label>
+      <div class="row3">
+        <label>Банк<input id="buyer_bank"></label>
+        <label>IBAN<input id="buyer_iban"></label>
+        <label>SWIFT<input id="buyer_swift"></label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Товар</legend>
+      <label>Категория<select id="category"></select></label>
+      <label>Наименование Товара<input id="goods_name"></label>
+      <div class="row">
+        <label>Код ТН ВЭД<select id="hs_code_pick"></select></label>
+        <label>Код (вручную)<input id="hs_code"></label>
+      </div>
+      <label>Страна происхождения<input id="origin_country" value="Казахстан"></label>
+      <div class="row3">
+        <label>Количество<input id="quantity" type="number" step="any"></label>
+        <label>Ед. изм.<input id="unit" value="кг"></label>
+        <label>Цена за ед.<input id="unit_price" type="number" step="any"></label>
+      </div>
+      <label>Технические характеристики<textarea id="goods_specs" rows="2"></textarea></label>
+      <div class="check"><input type="checkbox" id="contains_animal_products">
+        <span>В составе есть мясо, молоко или яйца (нужен ветеринарный сертификат)</span></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Цена и оплата</legend>
+      <div class="row">
+        <label>Валюта<select id="currency"></select></label>
+        <label>НДС<select id="vat_mode"></select></label>
+      </div>
+      <div class="row">
+        <label>Способ оплаты<select id="payment_method"></select></label>
+        <label>Условия оплаты<select id="payment_preset"></select></label>
+      </div>
+      <div class="hint" id="payment_note"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Поставка</legend>
+      <div class="row">
+        <label>Направление<select id="route"></select></label>
+        <label>Транспорт<select id="transport"></select></label>
+      </div>
+      <label>Условия поставки (Incoterms 2020)<select id="incoterms"></select></label>
+      <div class="hint" id="incoterms_note"></div>
+      <label id="delivery_place_label">Место поставки<input id="delivery_place"></label>
+      <label>Срок поставки<input id="delivery_date" type="date"></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Качество</legend>
+      <div class="row3" id="shelf_block">
+        <label>Срок годности<input id="shelf_life_value" type="number" value="12"></label>
+        <label>Единица<select id="shelf_life_unit">
+          <option value="months">месяцев</option><option value="years">лет</option></select></label>
+        <label>Остаток при отгрузке, %<input id="min_remaining_pct" type="number" value="75"></label>
+      </div>
+      <label id="warranty_block" style="display:none">Гарантийный срок, мес.<input id="warranty_months" type="number" value="12"></label>
+      <div class="check"><input type="checkbox" id="local_content">
+        <span>Приложить Приложение №3 (местное содержание)</span></div>
+    </fieldset>
+  </section>
+
+  <section>
+    <div id="notices"></div>
+    <div class="derived" id="derived"></div>
+    <article class="doc" id="doc"></article>
+  </section>
+</main>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  let showEn = true;
+
+  const FIELDS = ['contract_year','contract_seq','date','place',
+    'supplier_name','supplier_country','supplier_reg','supplier_rep','supplier_basis','supplier_address','supplier_bank','supplier_iban','supplier_swift',
+    'buyer_name','buyer_country','buyer_reg','buyer_rep','buyer_basis','buyer_address','buyer_bank','buyer_iban','buyer_swift',
+    'category','goods_name','hs_code','origin_country','quantity','unit','unit_price','goods_specs','contains_animal_products',
+    'currency','vat_mode','payment_method','payment_preset',
+    'route','transport','incoterms','delivery_place','delivery_date',
+    'shelf_life_value','shelf_life_unit','min_remaining_pct','warranty_months','local_content'];
+
+  /* ---------- заполнение справочников ---------- */
+  const fill = (el, items, val, text) => {
+    el.innerHTML = items.map(i => `<option value="${val(i)}">${text(i)}</option>`).join('');
+  };
+  fill($('category'), Object.entries(RULES.categories), e => e[0], e => e[1].name_ru);
+  fill($('currency'), RULES.currencies, c => c.code, c => c.code);
+  fill($('vat_mode'), RULES.vat_modes, v => v.id, v => v.ru);
+  fill($('payment_method'), RULES.payment_methods, m => m.id, m => m.ru);
+  fill($('payment_preset'), RULES.payment_presets, p => p.id, p => p.label);
+  fill($('route'), Object.entries(RULES.routes), e => e[0], e => e[1].name_ru);
+  fill($('transport'), RULES.transport_modes, t => t.id, t => t.ru);
+  fill($('incoterms'), Object.entries(RULES.incoterms), e => e[0],
+    e => `${e[0]} — ${e[1].name_ru}${e[1].road_ok ? '' : ' (не для фур)'}`);
+  $('incoterms').value = 'DAP';
+  $('vat_mode').value = 'export_0';
+  $('payment_preset').value = '30_70';
+
+  function refreshHs(){
+    const cat = RULES.categories[$('category').value];
+    const opts = [{code:'',ru:'— выбрать —'}].concat(cat.hs_codes || []);
+    $('hs_code_pick').innerHTML = opts.map(c =>
+      `<option value="${c.code}">${c.code ? c.code + ' — ' + c.ru : c.ru}</option>`).join('');
+  }
+  refreshHs();
+  $('hs_code_pick').addEventListener('change', () => {
+    if ($('hs_code_pick').value) { $('hs_code').value = $('hs_code_pick').value; render(); }
+  });
+
+  /* ---------- состояние ---------- */
+  function readState(){
+    const s = {};
+    for (const f of FIELDS){
+      const el = $(f);
+      if (!el) continue;
+      s[f] = el.type === 'checkbox' ? el.checked : el.value;
+    }
+    return s;
+  }
+
+  /* ---------- рендер превью ---------- */
+  const esc = t => String(t == null ? '' : t)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  function renderDoc(blocks){
+    const out = [];
+    for (const b of blocks){
+      if (b.type === 'title'){
+        out.push(`<h2 class="title">${esc(b.ru)}</h2>`);
+        if (showEn) out.push(`<p class="en" style="text-align:center">${esc(b.en)}</p>`);
+      } else if (b.type === 'h'){
+        out.push(`<h3>${esc(b.ru)}${showEn ? ' <span style="font-weight:400;color:#8a8a8a">/ ' + esc(b.en) + '</span>' : ''}</h3>`);
+      } else if (b.type === 'p'){
+        out.push(`<p>${esc(b.ru)}</p>`);
+        if (showEn) out.push(`<p class="en">${esc(b.en)}</p>`);
+      } else if (b.type === 'table'){
+        const grid = b.rows[0] && b.rows[0].length > 2 ? ' class="grid"' : '';
+        out.push(`<table${grid}>` + b.rows.map(r =>
+          '<tr>' + r.map(c => `<td>${esc(c)}</td>`).join('') + '</tr>').join('') + '</table>');
+      } else if (b.type === 'pagebreak'){
+        out.push('<hr class="pb">');
+      }
+    }
+    return out.join('');
+  }
+
+  function render(){
+    const state = readState();
+    const cat = RULES.categories[state.category];
+    $('shelf_block').style.display = cat.shelf_life ? '' : 'none';
+    $('warranty_block').style.display = cat.shelf_life ? 'none' : '';
+
+    const built = ENGINE.buildContract(state);
+    const d = built.derived;
+
+    $('delivery_place_label').firstChild.textContent = d.deliveryPlaceLabel.ru;
+    $('incoterms_note').textContent = d.incoterms.carrier_ru + '. Риск переходит ' + d.incoterms.risk_ru + '.';
+    const preset = RULES.payment_presets.find(p => p.id === state.payment_preset);
+    $('payment_note').textContent = preset ? preset.note : '';
+
+    const notices = [];
+    for (const w of d.warnings) notices.push(`<div class="notice warn"><b>Проверьте:</b> ${esc(w)}</div>`);
+    for (const q of d.questions) notices.push(`<div class="notice q"><b>Открытый вопрос:</b> ${esc(q.text)}</div>`);
+    $('notices').innerHTML = notices.join('');
+
+    $('derived').innerHTML = `
+      <div><span class="k">Номер:</span> ${esc(built.number)}</div>
+      <div><span class="k">Сумма:</span> ${esc(d.total.toLocaleString('ru-RU',{minimumFractionDigits:2}))} ${esc(state.currency)} (${esc(d.totalWords.ru)})</div>
+      <div><span class="k">Документов к отгрузке:</span> ${d.documents.length}</div>
+      <div><span class="k">Страховка:</span> ${d.insuranceRequired ? 'обязательна (' + esc(state.incoterms) + ')' : 'не обязательна'}</div>
+      <div><span class="k">Растаможка ввоза:</span> ${d.importCustoms === 'none' ? 'не требуется (ЕАЭС)' : (d.importCustoms === 'supplier' ? 'Поставщик' : 'Покупатель')}</div>
+      <div><span class="k">Право / арбитраж:</span> ${esc(d.law.ru)} · ${esc(d.arbitration.ru)}</div>
+      ${d.excluded.length ? '<div class="excluded">Исключены: ' + d.excluded.map(e => esc(e.ru) + ' (' + esc(e.reason) + ')').join('; ') + '</div>' : ''}`;
+
+    $('doc').innerHTML = renderDoc(built.blocks);
+    window.__lastBuild = built;
+    window.__lastState = state;
+  }
+
+  document.getElementById('form').addEventListener('input', render);
+  document.getElementById('form').addEventListener('change', e => {
+    if (e.target.id === 'category') refreshHs();
+    render();
+  });
+
+  /* ---------- DOCX ---------- */
+  async function downloadDocx(){
+    if (typeof JSZip === 'undefined'){
+      alert('Файл jszip.min.js не найден рядом с index.html. Положите его в ту же папку или используйте «Печать / PDF».');
+      return;
+    }
+    const built = window.__lastBuild;
+    try {
+      await DOCX.download(built.blocks, showEn, built.number + '.docx');
+    } catch (e) {
+      alert('Не удалось собрать DOCX: ' + e.message);
+    }
+  }
+
+  /* ---------- кнопки ---------- */
+  $('btn-docx').addEventListener('click', downloadDocx);
+  $('btn-print').addEventListener('click', () => window.print());
+  $('btn-en').addEventListener('click', () => {
+    showEn = !showEn;
+    $('btn-en').textContent = 'EN текст: ' + (showEn ? 'вкл' : 'выкл');
+    render();
+  });
+
+  const EXAMPLE = {
+    contract_year:2026, contract_seq:1, date:'2026-09-01', place:'Алматы',
+    supplier_name:'ТОО «Кондитерский дом Алатау»', supplier_country:'Казахстан', supplier_reg:'БИН 041240004821',
+    supplier_rep:'Ахметов А.К., директор', supplier_basis:'Устава',
+    supplier_address:'г. Алматы, ул. Розыбакиева 247', supplier_bank:'АО «Halyk Bank»',
+    supplier_iban:'KZ123456789012345678', supplier_swift:'HSBKKZKX',
+    buyer_name:'ООО «Торговый дом Восток»', buyer_country:'Узбекистан', buyer_reg:'ИНН 302456789',
+    buyer_rep:'Каримов Ш.Р., генеральный директор', buyer_basis:'Устава',
+    buyer_address:'г. Ташкент, ул. Амира Темура 15', buyer_bank:'АКБ «Ипотека-банк»',
+    buyer_iban:'UZ987654321098765432', buyer_swift:'IPTBUZ22',
+    category:'bakery', goods_name:'Вафли сахарные «Артек», СТ РК 1183-2003',
+    hs_code:'1905.32', origin_country:'Казахстан', quantity:18000, unit:'кг', unit_price:2.35,
+    goods_specs:'Короб 5 кг, 12 коробов на паллете, влажность не более 4,5%',
+    currency:'USD', vat_mode:'export_0', payment_method:'wire', payment_preset:'30_70',
+    route:'UZ', transport:'road', incoterms:'DAP',
+    delivery_place:'г. Ташкент, ул. Амира Темура 15, склад Покупателя', delivery_date:'2026-09-25',
+    shelf_life_value:9, shelf_life_unit:'months', min_remaining_pct:75
+  };
+  $('btn-example').addEventListener('click', () => {
+    for (const [k, v] of Object.entries(EXAMPLE)){
+      const el = $(k); if (!el) continue;
+      if (el.type === 'checkbox') el.checked = !!v; else el.value = v;
+    }
+    refreshHs(); $('hs_code_pick').value = EXAMPLE.hs_code; render();
+  });
+
+  if (!$('date').value) $('date').value = new Date().toISOString().slice(0,10);
+  render();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TWH — рабочее пространство сделки</title>
+<script src="../jszip.min.js"></script>
+<script src="../rules.js"></script>
+<script src="../engine.js"></script>
+<script src="../docx.js"></script>
+<script src="../deal-engine.js"></script>
+<style>
+  :root{--bg:#f6f5f3;--panel:#fff;--ink:#1a1a1a;--muted:#6b6b6b;--line:#e2e0dc;
+    --accent:#1f4f3f;--acc-bg:#e9f1ed;--buyer:#2a4d7a;--buyer-bg:#eaf0f8;--warn:#8a5a00;--warn-bg:#fdf6e6;--bad:#9b2c2c}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14.5px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  header{position:sticky;top:0;z-index:20;background:var(--panel);border-bottom:1px solid var(--line);padding:10px 18px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+  header h1{font-size:15px;margin:0;font-weight:600}
+  .ref{color:var(--muted);font-size:12.5px}
+  .sp{flex:1}
+  .roles{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .roles button{border:0;border-radius:0;padding:7px 14px;background:#fff}
+  .roles button.on.supplier{background:var(--accent);color:#fff}
+  .roles button.on.buyer{background:var(--buyer);color:#fff}
+  button{font:inherit;padding:6px 12px;border-radius:7px;border:1px solid var(--line);background:#fff;cursor:pointer;color:var(--ink)}
+  button:hover{border-color:#c9c6c0}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  body.as-buyer button.primary{background:var(--buyer);border-color:var(--buyer)}
+  button.link{border:0;background:none;color:var(--accent);padding:2px 4px;text-decoration:underline}
+  main{max-width:1180px;margin:0 auto;padding:16px 18px 60px}
+  .turn{border-radius:11px;padding:12px 14px;margin-bottom:14px;background:var(--acc-bg);border:1px solid #cfe0d9}
+  body.as-buyer .turn{background:var(--buyer-bg);border-color:#d3e0ef}
+  .turn h2{font-size:12px;letter-spacing:.06em;text-transform:uppercase;margin:0 0 8px;color:var(--muted)}
+  .turn .acts{display:flex;flex-direction:column;gap:7px}
+  .act{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .act input{width:220px}
+  .wait{color:var(--muted)}
+  .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .stat .k{font-size:12px;color:var(--muted)} .stat .v{font-size:17px;font-weight:600;margin-top:2px}
+  nav.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:14px;flex-wrap:wrap}
+  nav.tabs button{border:0;border-bottom:2px solid transparent;border-radius:0;background:none;padding:8px 12px;color:var(--muted)}
+  nav.tabs button.on{border-bottom-color:var(--ink);color:var(--ink);font-weight:600}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:16px;margin-bottom:14px}
+  .panel h3{margin:0 0 10px;font-size:15px}
+  table.t{border-collapse:collapse;width:100%;font-size:13.5px}
+  table.t th{text-align:left;font-weight:600;color:var(--muted);font-size:12px;border-bottom:1px solid var(--line);padding:6px 8px}
+  table.t td{border-bottom:1px solid #efeeea;padding:7px 8px;vertical-align:top}
+  .pill{display:inline-block;font-size:12px;padding:2px 8px;border-radius:20px;background:#efeeea;color:#444;white-space:nowrap}
+  .pill.good{background:#e3f1e8;color:#1f5d3a}.pill.mid{background:var(--warn-bg);color:var(--warn)}.pill.blue{background:var(--buyer-bg);color:var(--buyer)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .kv div{margin:3px 0}.kv .k{color:var(--muted)}
+  label{font-size:12.5px;color:var(--muted);display:block}
+  input,select{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:6px;width:100%;margin-top:2px;background:#fff}
+  .items td input{margin:0}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+  .row>label{flex:1;min-width:150px}
+  .note{font-size:12.5px;color:var(--muted)}
+  .timeline{list-style:none;margin:0;padding:0}
+  .timeline li{padding:8px 0;border-bottom:1px solid #efeeea;display:grid;grid-template-columns:130px 110px 1fr;gap:10px;font-size:13.5px}
+  .who-supplier{color:var(--accent);font-weight:600}.who-buyer{color:var(--buyer);font-weight:600}.who-system{color:var(--muted)}
+  #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#2b2b2b;color:#fff;padding:10px 16px;border-radius:9px;max-width:680px;font-size:13.5px;display:none;z-index:50}
+  #toast.bad{background:var(--bad)}
+  dialog{border:0;border-radius:12px;padding:0;max-width:900px;width:92vw}
+  dialog .dh{display:flex;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);position:sticky;top:0;background:#fff}
+  .doc{padding:26px 32px;font-family:Georgia,"Times New Roman",serif;font-size:13.5px;line-height:1.55;max-height:75vh;overflow:auto}
+  .doc h2{text-align:center;font-size:16px;margin:0 0 4px}.doc h3{font-size:13.5px;margin:18px 0 6px}
+  .doc p{margin:0 0 8px;text-align:justify}.doc .en{color:#7a7a7a;font-style:italic;font-size:12.5px;margin-top:-4px}
+  .doc table{border-collapse:collapse;width:100%;margin:6px 0 12px;font-size:12.5px}.doc td{border:1px solid #cfcdc8;padding:4px 7px;vertical-align:top}
+  .doc hr{border:0;border-top:1px dashed #cfcdc8;margin:20px 0}
+  @media (max-width:860px){.stats{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}.timeline li{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>TWH · рабочее пространство сделки</h1>
+  <span class="ref" id="dealref"></span>
+  <span class="sp"></span>
+  <span class="note">Вы действуете как</span>
+  <div class="roles" id="roles">
+    <button data-role="supplier" class="supplier">Поставщик</button>
+    <button data-role="buyer" class="buyer">Покупатель</button>
+  </div>
+  <button id="reset" title="Начать демо заново">Сбросить демо</button>
+</header>
+
+<main>
+  <section class="turn" id="turn"></section>
+  <section class="stats" id="stats"></section>
+  <nav class="tabs" id="tabs">
+    <button data-tab="overview">Обзор</button>
+    <button data-tab="contract">Договор</button>
+    <button data-tab="specs">Спецификации</button>
+    <button data-tab="payments">Счета и оплата</button>
+    <button data-tab="transport">Транспорт</button>
+    <button data-tab="timeline">Хронология</button>
+  </nav>
+  <section id="view"></section>
+  <p class="note">Прототип v0.2 по архитектуре TWH v0.1. TWH не принимает и не хранит деньги: платёж здесь — цифровой двойник внешнего банковского перевода. Данные хранятся только в этом браузере. <a href="../">Генератор договора</a></p>
+</main>
+
+<dialog id="dlg"><div class="dh"><b id="dlgTitle"></b><span class="sp"></span><button id="dlgDocx" class="primary">Скачать DOCX</button><button id="dlgClose">Закрыть</button></div><div class="doc" id="dlgBody"></div></dialog>
+<div id="toast"></div>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const esc = t => String(t == null ? '' : t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const money = (v, c) => (Number(v)||0).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' ' + (c||'');
+  const KEY = 'twh-deal-v2';
+
+  const SEED = {
+    ref: 'TWH-D-000001', route: 'UZ', incoterms: 'DAP', transport: 'road', currency: 'USD',
+    category: 'bakery', payment_preset: '30_70', vat_mode: 'export_0', frame_limit: 1000000,
+    delivery_place: 'г. Ташкент, ул. Амира Темура 15, склад Покупателя',
+    contract_number: 'TWH-2026-00001',
+    contract_terms: { place: 'Алматы', shelf_life_value: 9, min_remaining_pct: 75 },
+    companies: {
+      supplier: { name: 'ТОО «Кондитерский дом Алатау»', country: 'Казахстан', reg: 'БИН 041240004821',
+        rep: 'Ахметов А.К., директор', basis: 'Устава', address: 'г. Алматы, ул. Розыбакиева 247',
+        bank: 'АО «Halyk Bank»', iban: 'KZ123456789012345678', swift: 'HSBKKZKX' },
+      buyer: { name: 'ООО «Торговый дом Восток»', country: 'Узбекистан', reg: 'ИНН 302456789',
+        rep: 'Каримов Ш.Р., генеральный директор', basis: 'Устава', address: 'г. Ташкент, ул. Амира Темура 15',
+        bank: 'АКБ «Ипотека-банк»', iban: 'UZ987654321098765432', swift: 'IPTBUZ22' }
+    }
+  };
+  const DEFAULT_ITEMS = [
+    { name: 'Вафли сахарные «Артек», короб 5 кг', hs: '1905.32', unit: 'кг', qty: 10000, price: 2.35 },
+    { name: 'Печенье сахарное «Юбилейное», короб 4 кг', hs: '1905.31', unit: 'кг', qty: 6000, price: 1.90 }
+  ];
+
+  const nowIso = () => new Date().toISOString();
+  const load = () => { try { const r = localStorage.getItem(KEY); return r ? JSON.parse(r) : null; } catch(e){ return null; } };
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ state, role, tab })); } catch(e){} };
+  const saved = load();
+  let state = saved && saved.state && saved.state.v === 2 ? saved.state : DEAL.createDeal(SEED, nowIso());
+  let role = (saved && saved.role) || 'supplier';
+  let tab = (saved && saved.tab) || 'overview';
+  let draftItems = JSON.parse(JSON.stringify(DEFAULT_ITEMS));
+
+  function toast(msg, bad){ const t=$('toast'); t.textContent=msg; t.className=bad?'bad':''; t.style.display='block'; clearTimeout(toast._t); toast._t=setTimeout(()=>t.style.display='none', bad?6000:3200); }
+  function run(fn){ try { state = fn(state); save(); render(); return true; } catch(e){ if (e instanceof DEAL.DealError){ toast(e.message, true); return false; } throw e; } }
+
+  /* ---------- документы в модальном окне ---------- */
+  let dlgDoc = null;
+  function renderBlocks(blocks){
+    return blocks.map(b => {
+      if (b.type==='title') return `<h2>${esc(b.ru)}</h2><p class="en" style="text-align:center">${esc(b.en)}</p>`;
+      if (b.type==='h') return `<h3>${esc(b.ru)} <span style="font-weight:400;color:#8a8a8a">/ ${esc(b.en)}</span></h3>`;
+      if (b.type==='p') return `<p>${esc(b.ru)}</p><p class="en">${esc(b.en)}</p>`;
+      if (b.type==='table') return '<table>'+b.rows.map(r=>'<tr>'+r.map(c=>`<td>${esc(c)}</td>`).join('')+'</tr>').join('')+'</table>';
+      if (b.type==='pagebreak') return '<hr>';
+      return '';
+    }).join('');
+  }
+  function openDoc(title, blocks, filename){
+    dlgDoc = { blocks, filename };
+    $('dlgTitle').textContent = title;
+    $('dlgBody').innerHTML = renderBlocks(blocks);
+    $('dlg').showModal();
+  }
+  $('dlgClose').onclick = () => $('dlg').close();
+  $('dlgDocx').onclick = async () => {
+    if (typeof JSZip === 'undefined') return toast('jszip.min.js не найден рядом с приложением', true);
+    try { await DOCX.download(dlgDoc.blocks, true, dlgDoc.filename); } catch(e){ toast('Не удалось собрать DOCX: '+e.message, true); }
+  };
+  const docContract = () => openDoc('Договор '+state.contract.number, ENGINE.buildContract(DEAL.contractFields(state)).blocks, state.contract.number+'.docx');
+  const docSpec = id => { const sp=state.specs.find(x=>x.id===id); openDoc('Спецификация №'+sp.number, DEAL.specBlocks(state,id), `${state.contract.number}_Spec-${sp.number}.docx`); };
+  const docInv = id => { const i=state.invoices.find(x=>x.id===id); openDoc('Счёт '+i.number, DEAL.invoiceBlocks(state,id), i.number+'.docx'); };
+  const docCmr = id => { const c=state.cmrs.find(x=>x.id===id); openDoc(c.number, DEAL.cmrBlocks(state,id), c.number+'.docx'); };
+
+  /* ---------- «Ваш ход» ---------- */
+  function renderTurn(){
+    const acts = DEAL.nextActions(state, role);
+    const who = DEAL.ACTORS[role];
+    let html = `<h2>Ваш ход · ${esc(who)}</h2><div class="acts">`;
+    if (!acts.length) html += `<div class="wait">Сейчас от вас ничего не требуется. Переключитесь на другую сторону или создайте новую спецификацию.</div>`;
+    acts.forEach((a,i) => {
+      if (a.kind==='wait') html += `<div class="wait">${esc(a.text)}</div>`;
+      else if (a.kind==='pay') html += `<div class="act"><span>${esc(a.text)}</span><input id="ref_${i}" placeholder="Референс SWIFT / п/п"><button class="primary" data-act="pay" data-id="${a.id}" data-i="${i}">Отметить оплату</button></div>`;
+      else if (a.kind==='ship') html += `<div class="act"><span>${esc(a.text)}</span><input id="veh_${i}" placeholder="Госномер тягача / прицепа"><button class="primary" data-act="ship" data-id="${a.id}" data-i="${i}">Выписать CMR</button></div>`;
+      else html += `<div class="act"><span>${esc(a.text)}</span><button class="primary" data-act="${a.kind}" data-id="${a.id||''}">Сделать</button></div>`;
+    });
+    html += '</div>';
+    $('turn').innerHTML = html;
+  }
+
+  function renderStats(){
+    const s = DEAL.summary(state), c = state.deal.currency;
+    $('stats').innerHTML = [
+      ['Лимит договора', money(s.limit,c)], ['Законтрактовано', money(s.used,c)],
+      ['Оплачено и сверено', money(s.paid,c)], ['Ожидает оплаты', money(s.awaiting,c)],
+      ['На эскроу', money(s.escrow,c)]
+    ].map(([k,v])=>`<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+  }
+
+  const pill = (text, kind) => `<span class="pill ${kind||''}">${esc(text)}</span>`;
+  const specPill = st => pill(DEAL.SPEC_STATUS_RU[st], st==='FULFILLED'?'good':(st==='IN_REVIEW'?'mid':'blue'));
+  const payPill = st => pill(DEAL.PAYMENT_STATUS_RU[st], st==='RECONCILED'?'good':(['AWAITING_PAYMENT','PAID_UNCONFIRMED'].includes(st)?'mid':(st==='HELD_IN_ESCROW'?'blue':'')));
+  const approvals = obj => ['supplier','buyer'].map(r => `${DEAL.ACTORS[r]}: ${obj.approvals[r]===obj.version?'✓ согласовал':'— ждём'}`).join(' · ');
+
+  /* ---------- вкладки ---------- */
+  function vOverview(){
+    const d = state.deal, sup = state.companies.supplier, buy = state.companies.buyer;
+    const preset = RULES.payment_presets.find(p=>p.id===d.payment_preset);
+    const route = RULES.routes[d.route];
+    return `<div class="grid2">
+      <div class="panel kv"><h3>Поставщик</h3><div><b>${esc(sup.name)}</b></div><div>${esc(sup.address)}, ${esc(sup.country)}</div><div class="k">${esc(sup.reg)} · ${esc(sup.bank)} · ${esc(sup.iban)}</div></div>
+      <div class="panel kv"><h3>Покупатель</h3><div><b>${esc(buy.name)}</b></div><div>${esc(buy.address)}, ${esc(buy.country)}</div><div class="k">${esc(buy.reg)} · ${esc(buy.bank)}</div></div>
+    </div>
+    <div class="panel kv"><h3>Условия сделки</h3>
+      <div><span class="k">Рамочный договор:</span> ${esc(state.contract.number)} · ${pill(DEAL.CONTRACT_STATUS_RU[state.contract.status], state.contract.status==='AGREED'?'good':'mid')}</div>
+      <div><span class="k">Маршрут:</span> Казахстан → ${esc(route.name_ru)}${route.eaeu?' (ЕАЭС)':''} · ${esc(d.incoterms)} · автотранспорт</div>
+      <div><span class="k">Оплата:</span> ${esc(preset.label)}</div>
+      <div><span class="k">Место поставки:</span> ${esc(d.delivery_place)}</div>
+    </div>
+    <div class="panel"><h3>Спецификации</h3>${specsTable()}</div>`;
+  }
+
+  function specsTable(){
+    if (!state.specs.length) return `<p class="note">Спецификаций пока нет. ${state.contract.status==='AGREED'?'Создайте первую на вкладке «Спецификации».':'Сначала обе стороны согласуют договор.'}</p>`;
+    return `<table class="t"><tr><th>№</th><th>Дата</th><th>Позиций</th><th>Сумма</th><th>Поставка до</th><th>Статус</th><th></th></tr>` +
+      state.specs.map(sp => `<tr><td>${sp.number}</td><td>${esc(sp.date)}</td><td>${sp.items.length}</td><td>${money(DEAL.specTotal(sp), state.deal.currency)}</td><td>${esc(sp.delivery_date)}</td><td>${specPill(sp.status)}</td><td><button class="link" data-doc="spec" data-id="${sp.id}">документ</button></td></tr>`).join('') + '</table>';
+  }
+
+  function vContract(){
+    const d = state.deal, editable = !state.specs.length;
+    const opts = (list, cur) => list.map(([v,t])=>`<option value="${esc(v)}" ${v===cur?'selected':''}>${esc(t)}</option>`).join('');
+    return `<div class="panel">
+      <h3>Рамочный договор ${esc(state.contract.number)}, версия ${state.contract.version}</h3>
+      <p>${pill(DEAL.CONTRACT_STATUS_RU[state.contract.status], state.contract.status==='AGREED'?'good':'mid')} <span class="note">${approvals(state.contract)}</span></p>
+      <p class="note">Как у завода: договор заключается один раз с большим лимитом, а поставки идут спецификациями. Договор собирается тем же генератором, что и раньше, все правила по маршруту, документам и праву работают.</p>
+      ${editable ? `<div class="row">
+        <label>Условия оплаты<select id="c_pay">${opts(RULES.payment_presets.map(p=>[p.id,p.label]), d.payment_preset)}</select></label>
+        <label>Incoterms<select id="c_inc">${opts(Object.keys(RULES.incoterms).filter(k=>RULES.incoterms[k].road_ok).map(k=>[k,k]), d.incoterms)}</select></label>
+        <label>Направление<select id="c_route">${opts(Object.entries(RULES.routes).map(([k,r])=>[k,r.name_ru]), d.route)}</select></label>
+        <label>Лимит договора<input id="c_lim" type="number" value="${d.frame_limit}"></label>
+        <button id="c_save">Сохранить изменения</button>
+      </div><p class="note">Любая правка поднимает версию и сбрасывает согласования обеих сторон.</p>`
+      : '<p class="note">По договору уже есть спецификации, условия зафиксированы. Изменения оформляются допсоглашением.</p>'}
+      <p><button class="primary" data-doc="contract">Открыть договор</button></p>
+    </div>`;
+  }
+
+  function vSpecs(){
+    const canCreate = state.contract.status === 'AGREED';
+    const left = DEAL.summary(state).left;
+    const rows = draftItems.map((it,i)=>`<tr>
+      <td><input data-it="${i}" data-f="name" value="${esc(it.name)}"></td>
+      <td style="width:100px"><input data-it="${i}" data-f="hs" value="${esc(it.hs)}"></td>
+      <td style="width:70px"><input data-it="${i}" data-f="unit" value="${esc(it.unit)}"></td>
+      <td style="width:100px"><input data-it="${i}" data-f="qty" type="number" value="${it.qty}"></td>
+      <td style="width:100px"><input data-it="${i}" data-f="price" type="number" step="0.01" value="${it.price}"></td>
+      <td style="width:120px">${money((Number(it.qty)||0)*(Number(it.price)||0), state.deal.currency)}</td>
+      <td style="width:40px"><button class="link" data-rm="${i}">×</button></td></tr>`).join('');
+    const draftTotal = draftItems.reduce((a,it)=>a+(Number(it.qty)||0)*(Number(it.price)||0),0);
+    return `<div class="panel"><h3>Спецификации к договору</h3>${specsTable()}</div>
+    ${canCreate ? `<div class="panel"><h3>Новая спецификация</h3>
+      <p class="note">Несколько товаров в одной спецификации — то, о чём просил завод. Остаток лимита договора: ${money(left, state.deal.currency)}.</p>
+      <table class="t items"><tr><th>Наименование</th><th>ТН ВЭД</th><th>Ед.</th><th>Кол-во</th><th>Цена</th><th>Сумма</th><th></th></tr>${rows}
+      <tr><td colspan="5" style="text-align:right"><b>Итого</b></td><td><b>${money(draftTotal, state.deal.currency)}</b></td><td></td></tr></table>
+      <div class="row" style="margin-top:10px"><button id="s_add">+ позиция</button>
+        <label>Поставка до<input id="s_date" type="date" value="${new Date(Date.now()+21*864e5).toISOString().slice(0,10)}"></label>
+        <label>Упаковка<input id="s_pack" value="Гофротара (картон)"></label>
+        <button class="primary" id="s_create">Создать и отправить второй стороне</button></div></div>`
+      : '<div class="panel note">Спецификации можно создавать после того, как обе стороны согласуют договор.</div>'}`;
+  }
+
+  function vPayments(){
+    if (!state.payments.length) return '<div class="panel note">Платежи появятся после согласования первой спецификации. График строится из условий оплаты договора.</div>';
+    const c = state.deal.currency;
+    const rows = state.payments.map(p => {
+      const sp = state.specs.find(x=>x.id===p.spec_id), inv = state.invoices.find(x=>x.id===p.invoice_id);
+      return `<tr><td>${esc(p.ref)}</td><td>№${sp.number}</td><td>${esc(p.purpose_ru)}<div class="note">${p.method==='ESCROW'?'Эскроу TWH, раскрытие после получения товара':(p.method==='LC'?'Аккредитив':'Банковский перевод')}</div></td>
+        <td>${money(p.amount,c)}</td><td>${esc(p.due_at||'—')}</td><td>${payPill(p.status)}${p.bank_reference?`<div class="note">реф. ${esc(p.bank_reference)}</div>`:''}</td>
+        <td>${inv?`<button class="link" data-doc="inv" data-id="${inv.id}">${esc(inv.number)}</button>`:'<span class="note">счёт после события</span>'}</td></tr>`;
+    }).join('');
+    return `<div class="panel"><h3>Платежи · цифровой двойник</h3>
+      <p class="note">Перевод идёт между банковскими счетами сторон, как обычно. TWH хранит обязательство, статус, референс и сверку со счётом. Реквизиты в каждом платеже зафиксированы на момент его создания.</p>
+      <table class="t"><tr><th>Платёж</th><th>Спец.</th><th>Назначение</th><th>Сумма</th><th>Срок</th><th>Статус</th><th>Счёт</th></tr>${rows}</table></div>`;
+  }
+
+  function vTransport(){
+    const blocked = state.specs.filter(sp=>sp.status==='AGREED').map(sp=>({ sp, b: DEAL.shipmentBlockers(state, sp.id) })).filter(x=>x.b.length);
+    const rows = state.cmrs.map(c => { const sp=state.specs.find(x=>x.id===c.spec_id);
+      return `<tr><td>${esc(c.number)}</td><td>№${sp.number}</td><td>${esc(c.vehicle)}</td><td>${esc(c.place_delivery)}</td><td>${pill(DEAL.CMR_STATUS_RU[c.status], c.status==='DELIVERED'?'good':'blue')}</td><td><button class="link" data-doc="cmr" data-id="${c.id}">открыть</button></td></tr>`; }).join('');
+    return `<div class="panel"><h3>CMR</h3>${state.cmrs.length?`<table class="t"><tr><th>Номер</th><th>Спец.</th><th>Машина</th><th>Место разгрузки</th><th>Статус</th><th></th></tr>${rows}</table>`:'<p class="note">CMR ещё не выписывались. Отгрузку открывает поставщик из блока «Ваш ход», когда спецификация согласована и аванс получен.</p>'}</div>
+      ${blocked.length?`<div class="panel"><h3>Почему отгрузка пока закрыта</h3>${blocked.map(x=>`<p>Спецификация №${x.sp.number}: ${esc(x.b.join(' '))}</p>`).join('')}</div>`:''}`;
+  }
+
+  function vTimeline(){
+    const items = state.events.slice().reverse().map(e => `<li><span class="note">${esc(new Date(e.at).toLocaleString('ru-RU'))}</span><span class="who-${e.actor}">${esc(DEAL.ACTORS[e.actor]||'Система')}</span><span>${esc(e.text)}</span></li>`).join('');
+    return `<div class="panel"><h3>Хронология сделки</h3><ul class="timeline">${items}</ul></div>`;
+  }
+
+  /* ---------- рендер ---------- */
+  function render(){
+    document.body.className = role==='buyer' ? 'as-buyer' : '';
+    $('dealref').textContent = `${state.deal.ref} · договор ${state.contract.number}`;
+    document.querySelectorAll('#roles button').forEach(b => b.classList.toggle('on', b.dataset.role===role));
+    document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab===tab));
+    renderTurn(); renderStats();
+    $('view').innerHTML = ({overview:vOverview, contract:vContract, specs:vSpecs, payments:vPayments, transport:vTransport, timeline:vTimeline}[tab])();
+  }
+
+  /* ---------- события ---------- */
+  $('roles').onclick = e => { const r=e.target.dataset.role; if(r){ role=r; save(); render(); } };
+  $('tabs').onclick = e => { const t=e.target.dataset.tab; if(t){ tab=t; save(); render(); } };
+  $('reset').onclick = () => { if (confirm('Сбросить демо и начать сделку заново?')) { state = DEAL.createDeal(SEED, nowIso()); role='supplier'; tab='overview'; draftItems=JSON.parse(JSON.stringify(DEFAULT_ITEMS)); save(); render(); toast('Демо сброшено'); } };
+
+  document.body.addEventListener('click', e => {
+    const t = e.target;
+    if (t.dataset.doc){
+      if (t.dataset.doc==='contract') docContract();
+      if (t.dataset.doc==='spec') docSpec(t.dataset.id);
+      if (t.dataset.doc==='inv') docInv(t.dataset.id);
+      if (t.dataset.doc==='cmr') docCmr(t.dataset.id);
+      return;
+    }
+    const a = t.dataset.act; const id = t.dataset.id; const now = nowIso();
+    if (a==='approve_contract') { if (run(s=>DEAL.approveContract(s, role, now))) toast('Договор согласован с вашей стороны'); }
+    if (a==='approve_spec') { if (run(s=>DEAL.approveSpec(s, role, id, now))) toast('Спецификация согласована'); }
+    if (a==='pay') { const ref=$('ref_'+t.dataset.i).value; if (run(s=>DEAL.markPaymentSent(s, role, id, { bank_reference: ref }, now))) toast('Оплата отмечена. Поставщик увидит её у себя.'); }
+    if (a==='confirm_payment') { if (run(s=>DEAL.confirmPayment(s, role, id, now))) toast('Поступление подтверждено и сверено со счётом'); }
+    if (a==='ship') { const v=$('veh_'+t.dataset.i).value; if (run(s=>DEAL.issueCMR(s, role, id, { vehicle: v }, now))) toast('CMR выписана, груз в пути'); }
+    if (a==='deliver') { if (run(s=>DEAL.confirmDelivery(s, role, id, now))) toast('Получение подтверждено'); }
+    if (t.id==='c_save') {
+      const patch = { payment_preset: $('c_pay').value, incoterms: $('c_inc').value, route: $('c_route').value, frame_limit: Number($('c_lim').value) };
+      if (run(s=>DEAL.updateContract(s, role, patch, now))) toast('Договор изменён, согласования сброшены');
+    }
+    if (t.id==='s_add') { draftItems.push({ name:'', hs:'', unit:'кг', qty:1, price:1 }); render(); }
+    if (t.dataset.rm) { draftItems.splice(Number(t.dataset.rm),1); render(); }
+    if (t.id==='s_create') {
+      if (run(s=>DEAL.createSpec(s, role, { items: draftItems, delivery_date: $('s_date').value, packaging: $('s_pack').value }, now))) {
+        toast('Спецификация отправлена второй стороне на согласование');
+        draftItems = JSON.parse(JSON.stringify(DEFAULT_ITEMS));
+        render();
+      }
+    }
+  });
+  document.body.addEventListener('change', e => {
+    const t = e.target;
+    if (t.dataset.it !== undefined) { const it = draftItems[Number(t.dataset.it)]; it[t.dataset.f] = ['qty','price'].includes(t.dataset.f) ? Number(t.value) : t.value; render(); }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

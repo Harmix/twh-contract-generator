@@ -144,7 +144,7 @@ function contractFields(s) {
     category: d.category, goods_name: t.goods_name || 'Товар согласно Спецификациям к настоящему Договору',
     hs_code: t.hs_code || '', origin_country: sup.country,
     /* Рамочный договор: сумма = лимит, конкретика — в спецификациях. */
-    quantity: 1, unit: 'рамочный лимит', unit_price: d.frame_limit,
+    quantity: 1, unit: t.lot_unit || 'рамочный лимит', unit_price: d.frame_limit,
     goods_specs: 'Ассортимент, количество, цена и сроки поставки определяются Спецификациями, являющимися неотъемлемой частью Договора.',
     currency: d.currency, vat_mode: d.vat_mode, payment_method: d.payment_preset === 'escrow' ? 'escrow' : (d.payment_preset === 'lc' ? 'lc' : 'wire'),
     payment_preset: d.payment_preset, route: d.route, transport: d.transport, incoterms: d.incoterms,

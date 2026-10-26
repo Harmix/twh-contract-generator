@@ -1,4 +1,4 @@
-/* Проверка каталога и RFQ. Запуск: node verify-rfq.mjs */
+/* Проверка регистрации, каталога, подбора поставщиков и RFQ. Запуск: node verify-rfq.mjs */
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const { RULES } = require('./rules.js');
@@ -17,101 +17,118 @@ const throws = (n, fn, needle) => {
 const group = n => console.log('\n' + n);
 const T = d => `2026-10-${String(d).padStart(2, '0')}T10:00:00.000Z`;
 
-const seed = {
-  companies: {
-    supplier: { name: 'ТОО «Алатау»', country: 'Казахстан', reg: 'БИН 1', rep: 'А.К.', address: 'Алматы', bank: 'Halyk', iban: 'KZ11', swift: 'HSBKKZKX' },
-    buyer: { name: 'ООО «Восток»', country: 'Узбекистан', reg: 'ИНН 2', rep: 'Ш.Р.', address: 'Ташкент', bank: 'Ипотека', iban: 'UZ22', swift: 'IPTBUZ22' }
-  },
-  catalog: [
-    { name: 'Вафли «Артек»', hs: '1905.32', unit: 'кг', price: 2.35, moq: 2000, shelf_life_months: 9, standard: 'СТ РК 1183-2003' },
-    { name: 'Печенье «Юбилейное»', hs: '1905.31', unit: 'кг', price: 1.9, moq: 1000, shelf_life_months: 6 }
-  ]
-};
+const seed = { companies: [
+  { role: 'supplier', name: 'ТОО «Алатау»', country: 'Казахстан', reg: '041240004821', email: 'a@alatau.kz', city: 'Алматы', address: 'Алматы',
+    iban: 'KZ123456789012345678', swift: 'HSBKKZKX', bank: 'Halyk', certs: ['eaeu_decl', 'quality_cert'], export_to: ['UZ', 'KG'], lead_time_days: 12,
+    products: [
+      { name: 'Вафли «Артек»', hs: '1905.32', unit: 'кг', price: 2.35, moq: 2000, shelf_life_months: 9 },
+      { name: 'Печенье «Юбилейное»', hs: '1905.31', unit: 'кг', price: 1.9, moq: 1000, shelf_life_months: 6 }] },
+  { role: 'supplier', name: 'ТОО «Тараз Тәтті»', country: 'Казахстан', reg: '150540011223', email: 'sales@taraz.kz', city: 'Тараз', address: 'Тараз',
+    iban: 'KZ556010002000654321', swift: 'HSBKKZKX', bank: 'Halyk', certs: ['eaeu_decl', 'quality_cert', 'halal'], export_to: ['UZ'], lead_time_days: 20,
+    products: [
+      { name: 'Вафли «Тараз»', hs: '1905.32', unit: 'кг', price: 2.15, moq: 5000, shelf_life_months: 8 },
+      { name: 'Печенье овсяное', hs: '1905.31', unit: 'кг', price: 1.8, moq: 3000, shelf_life_months: 5 }] },
+  { role: 'supplier', name: 'ТОО «Шымкент Кондитер»', country: 'Казахстан', reg: '090340012345', email: 'info@shym.kz', city: 'Шымкент', address: 'Шымкент',
+    iban: 'KZ986010002000123456', swift: 'HSBKKZKX', bank: 'Halyk', certs: ['eaeu_decl'], export_to: [], lead_time_days: 45,
+    products: [{ name: 'Вафли «Шымкент»', hs: '1905.32', unit: 'кг', price: 2.6, moq: 1000, shelf_life_months: 6 }] },
+  { role: 'buyer', name: 'ООО «Восток»', country: 'Узбекистан', reg: 'ИНН 302456789', email: 'buy@vostok.uz', address: 'Ташкент', iban: 'UZ987654321098765432', swift: 'IPTBUZ22', bank: 'Ипотека' }
+] };
 const rfqArgs = {
-  items: [{ product_id: 'prod1', qty: 10000, specification: 'влажность не более 4,5%' }, { product_id: 'prod2', qty: 6000 }],
+  lines: [{ hs: '1905.32', name: 'Вафли', qty: 10000, target_price: 2.3, specification: 'влажность не более 4,5%' }, { hs: '1905.31', name: 'Печенье', qty: 6000, target_price: 1.9 }],
   route: 'UZ', delivery_place: 'Ташкент, склад', incoterms: 'DAP', currency: 'USD', payment_preset: '30_70',
-  delivery_date: '2026-11-10', offer_deadline: '2026-10-05', compliance: ['eaeu_decl', 'shelf_75']
+  delivery_date: '2026-10-31', offer_deadline: '2026-10-05', compliance: ['eaeu_decl', 'halal', 'shelf_75']
 };
 
-group('Каталог');
+group('Регистрация компаний');
 let w = M.createWorkspace(seed, T(1));
-ok('два товара в каталоге с артикулами', w.catalog.length === 2 && w.catalog[0].sku === 'SKU-001');
-throws('покупатель не публикует товары', () => M.addProduct(w, 'buyer', { name: 'X', price: 1, unit: 'кг' }, T(1)), 'Поставщик');
-throws('товар без цены не публикуется', () => M.addProduct(w, 'supplier', { name: 'X', unit: 'кг' }, T(1)), 'цену');
-ok('поставщик добавляет товар', M.addProduct(w, 'supplier', { name: 'Пряники', price: 2.1, unit: 'кг' }, T(1)).catalog.length === 3);
+ok('3 поставщика, 1 покупатель, 5 товаров', w.companies.filter(c => c.role === 'supplier').length === 3 && w.catalog.length === 5);
+ok('БИН сохранён с префиксом', w.companies[0].reg === 'БИН 041240004821');
+const base = { role: 'buyer', name: 'ТОО «Новый»', country: 'Казахстан', reg: '123456789012', email: 'new@new.kz' };
+throws('БИН не из 12 цифр', () => M.registerCompany(w, { ...base, reg: '12345' }, T(1)), '12 цифр');
+throws('плохой e-mail', () => M.registerCompany(w, { ...base, email: 'bad' }, T(1)), 'e-mail');
+throws('повтор e-mail', () => M.registerCompany(w, { ...base, email: 'a@alatau.kz' }, T(1)), 'уже зарегистрирована');
+throws('повтор БИН', () => M.registerCompany(w, { ...base, reg: '041240004821' }, T(1)), 'регистрационным номером');
+throws('KZ IBAN не 20 символов', () => M.registerCompany(w, { ...base, iban: 'KZ1234567890123' }, T(1)), '20 символов');
+throws('SWIFT неверный', () => M.registerCompany(w, { ...base, swift: 'ABC' }, T(1)), 'SWIFT');
+throws('поставщику нужен IBAN', () => M.registerCompany(w, { ...base, role: 'supplier' }, T(1)), 'IBAN');
+const w1 = M.registerCompany(w, { ...base, iban: 'KZ123456789012345670' }, T(1));
+ok('регистрация проходит и пишется в журнал', w1.companies.length === 5 && w1.events.some(e => e.type === 'COMPANY_REGISTERED'));
+throws('покупатель не публикует товары', () => M.addProduct(w, 'co4', { name: 'X', hs: '1905', price: 1, unit: 'кг' }, T(1)), 'поставщик');
+throws('код ТН ВЭД в формате', () => M.addProduct(w, 'co1', { name: 'X', hs: '19', price: 1, unit: 'кг' }, T(1)), 'ТН ВЭД');
+ok('поставщик публикует товар', M.addProduct(w, 'co1', { name: 'Пряники', hs: '1905.90.20', price: 2.1, unit: 'кг' }, T(1)).catalog.length === 6);
 
-group('RFQ — поля из письма Бекмырзы');
-throws('поставщик не отправляет RFQ', () => M.createRFQ(w, 'supplier', rfqArgs, T(1)), 'Покупатель');
-throws('ниже минимальной партии нельзя', () => M.createRFQ(w, 'buyer', { ...rfqArgs, items: [{ product_id: 'prod1', qty: 500 }] }, T(1)), 'минимальная партия');
-throws('без места поставки нельзя', () => M.createRFQ(w, 'buyer', { ...rfqArgs, delivery_place: '' }, T(1)), 'Destination');
-throws('срок предложений в прошлом нельзя', () => M.createRFQ(w, 'buyer', { ...rfqArgs, offer_deadline: '2026-09-01' }, T(1)), 'прошёл');
-throws('поставка раньше срока предложений нельзя', () => M.createRFQ(w, 'buyer', { ...rfqArgs, delivery_date: '2026-10-03' }, T(1)), 'позже');
-w = M.createRFQ(w, 'buyer', rfqArgs, T(1));
+group('RFQ и подбор поставщиков');
+throws('поставщик не создаёт RFQ', () => M.createRFQ(w, 'co1', rfqArgs, T(1)), 'покупатель');
+throws('без позиций нельзя', () => M.createRFQ(w, 'co4', { ...rfqArgs, lines: [] }, T(1)), 'позицию');
+throws('без места поставки нельзя', () => M.createRFQ(w, 'co4', { ...rfqArgs, delivery_place: '' }, T(1)), 'Destination');
+throws('поставка раньше дедлайна предложений нельзя', () => M.createRFQ(w, 'co4', { ...rfqArgs, delivery_date: '2026-10-03' }, T(1)), 'позже');
+w = M.createRFQ(w, 'co4', rfqArgs, T(1));
 const r = w.rfqs[0];
-const fields = ['items', 'origin', 'route', 'delivery_place', 'incoterms', 'currency', 'payment_preset', 'delivery_date', 'documents', 'compliance', 'offer_deadline'];
-ok('все 12 полей RFQ заполнены (Product, Quantity, Specification внутри items)', fields.every(f => r[f] !== undefined && r[f] !== '') && r.items[0].qty === 10000 && r.items[0].specification);
-ok('происхождение взято из каталога', r.origin === 'Казахстан');
-ok('документы по умолчанию из правил маршрута: вне ЕАЭС есть экспортная декларация', r.documents.includes('Экспортная декларация') && r.documents.some(d => d.includes('CMR')));
-ok('данные товара зафиксированы снимком в RFQ', r.items[0].hs === '1905.32' && r.items[0].list_price === 2.35);
-throws('второй открытый RFQ запрещён', () => M.createRFQ(w, 'buyer', rfqArgs, T(1)), 'открытый');
-ok('поставщик видит «Ответить на RFQ»', M.nextActions(w, 'supplier')[0].kind === 'answer_rfq');
+ok('RFQ в черновике, подобрано 3 поставщика', r.status === 'DRAFT' && r.matches.length === 3);
+const by = id => r.matches.find(m => m.supplier_id === id);
+ok('у каждой оценки 6 критериев, сумма весов 100', r.matches.every(m => m.factors.length === 6) && Object.values(M.WEIGHTS).reduce((a, b) => a + b, 0) === 100);
+ok('оценка = сумма баллов по критериям', r.matches.every(m => m.score === m.factors.reduce((a, f) => a + f.points, 0)));
+ok('Шымкент покрывает 1 из 2 позиций — неполный, в конце', !by('co3').complete && r.matches[r.matches.length - 1].supplier_id === 'co3');
+ok('Тараз: все сертификаты, включая Халал', by('co2').factors.find(f => f.key === 'compliance').points === M.WEIGHTS.compliance);
+ok('Алатау: нет Халал — объяснение это говорит', by('co1').factors.find(f => f.key === 'compliance').note.includes('Халал'));
+ok('Тараз: мин. партия печенья 3000 ≤ 6000, вафель 5000 ≤ 10000 — баллы за партию', by('co2').factors.find(f => f.key === 'moq').points === M.WEIGHTS.moq);
+ok('срок: Алатау 12 дн. успевает, баллы полные', by('co1').factors.find(f => f.key === 'delivery').points === M.WEIGHTS.delivery);
+ok('опыт по направлению: Шымкент без поставок в УЗ — 0', by('co3').factors.find(f => f.key === 'experience').points === 0);
+ok('подбор выбрал товары поставщика под каждую позицию', by('co1').product_ids.every(Boolean) && by('co3').product_ids[1] === null);
+throws('неполному поставщику RFQ не отправить', () => M.sendRFQ(w, 'co4', 'rfq1', ['co3'], T(1)), 'не все позиции');
+throws('без выбора поставщиков не отправить', () => M.sendRFQ(w, 'co4', 'rfq1', [], T(1)), 'хотя бы одного');
+w = M.sendRFQ(w, 'co4', 'rfq1', ['co1', 'co2'], T(1));
+ok('отправлен двум поставщикам', w.rfqs[0].status === 'SENT' && w.rfqs[0].recipients.length === 2);
+ok('поставщик видит запрос в «Ваш ход»', M.nextActions(w, 'co1')[0].kind === 'goto_rfq');
+ok('Шымкенту запрос не пришёл', M.nextActions(w, 'co3')[0].kind === 'wait');
 
-group('Предложение');
-throws('покупатель не делает предложение', () => M.submitOffer(w, 'buyer', 'rfq1', { lead_time_days: 10 }, T(2)), 'Поставщик');
-throws('без срока отгрузки нельзя', () => M.submitOffer(w, 'supplier', 'rfq1', {}, T(2)), 'срок');
-throws('после дедлайна нельзя', () => M.submitOffer(w, 'supplier', 'rfq1', { lead_time_days: 10 }, T(9)), 'истёк');
-let w2 = M.submitOffer(w, 'supplier', 'rfq1', { prices: [2.3, 1.85], lead_time_days: 14 }, T(2));
-const o = w2.offers[0];
-ok('сумма предложения 10000×2.30 + 6000×1.85 = 34100', o.total === 34100, String(o.total));
-ok('успевает к сроку поставки', o.meets_delivery === true);
-ok('RFQ в статусе «получено предложение»', w2.rfqs[0].status === 'OFFERED');
-const w3 = M.submitOffer(w2, 'supplier', 'rfq1', { prices: [2.25, 1.85], lead_time_days: 14 }, T(3));
-ok('новое предложение заменяет старое', w3.offers[0].status === 'SUPERSEDED' && w3.offers[1].status === 'SUBMITTED');
-ok('покупатель видит «Рассмотреть предложение»', M.nextActions(w2, 'buyer')[0].kind === 'review_offer');
-const wr = M.rejectOffer(w2, 'buyer', 'off1', T(3));
-ok('отклонение снова открывает RFQ', wr.rfqs[0].status === 'SENT' && wr.offers[0].status === 'REJECTED');
-throws('просроченное предложение не принять', () => M.acceptOffer(w2, 'buyer', 'off1', T(20)), 'действовало');
+group('Предложения и сравнение');
+throws('не получатель не может ответить', () => M.submitOffer(w, 'co3', 'rfq1', { lead_time_days: 10 }, T(2)), 'не отправлялся');
+throws('без срока отгрузки нельзя', () => M.submitOffer(w, 'co1', 'rfq1', {}, T(2)), 'срок');
+throws('после дедлайна нельзя', () => M.submitOffer(w, 'co1', 'rfq1', { lead_time_days: 10 }, T(9)), 'истёк');
+throws('чужой товар в предложении нельзя', () => M.submitOffer(w, 'co1', 'rfq1', { lead_time_days: 10, product_ids: ['prod3', 'prod2'] }, T(2)), 'свой товар');
+w = M.submitOffer(w, 'co1', 'rfq1', { prices: [2.3, 1.85], lead_time_days: 12 }, T(2));
+w = M.submitOffer(w, 'co2', 'rfq1', { prices: [2.15, 1.8], lead_time_days: 20 }, T(2));
+const cmp = M.compareOffers(w, 'rfq1');
+ok('Алатау 34 100, Тараз 32 300', w.offers[0].total === 34100 && w.offers[1].total === 32300);
+ok('сравнение: дешевле Тараз, быстрее Алатау', cmp[0].supplier.id === 'co2' && cmp[0].cheapest && cmp.find(x => x.supplier.id === 'co1').fastest);
+ok('разница с лучшей ценой посчитана', cmp.find(x => x.supplier.id === 'co1').over_best === 1800);
+ok('покупатель видит «Сравните предложения»', M.nextActions(w, 'co4')[0].text.includes('Сравните'));
+throws('отказ без причины нельзя', () => M.declineRFQ(M.sendRFQ(M.createRFQ(M.createWorkspace(seed, T(1)), 'co4', rfqArgs, T(1)), 'co4', 'rfq1', ['co1'], T(1)), 'co1', 'rfq1', '', T(2)), 'причину');
 
-group('Принятие → сделка, данные текут без повторного ввода');
-let w4 = M.acceptOffer(w2, 'buyer', 'off1', T(3));
-const d = w4.deal;
-ok('сделка создана, договор на согласовании', d && d.contract.status === 'IN_REVIEW');
-ok('сумма договора = сумма предложения', d.deal.frame_limit === 34100);
-ok('маршрут, Incoterms, место, оплата — из RFQ', d.deal.route === 'UZ' && d.deal.incoterms === 'DAP' && d.deal.delivery_place === 'Ташкент, склад' && d.deal.payment_preset === '30_70');
-ok('срок годности — минимальный из карточек (6 мес.)', d.contract.terms.shelf_life_value === 6);
-const cf = D.contractFields(d);
-ok('договор: товары и ТН ВЭД из RFQ', cf.goods_name.includes('Вафли') && cf.hs_code.includes('1905.32'));
-throws('второе принятие невозможно', () => M.acceptOffer(w4, 'buyer', 'off1', T(3)), 'не на рассмотрении');
-ok('источник каждого поля договора показан', M.contractSources(w4).length >= 12 && M.contractSources(w4).some(s => s[2] === 'OFF-0001'));
+group('Принятие → сделка с выбранным поставщиком');
+throws('поставщик не принимает предложения', () => M.acceptOffer(w, 'co1', 'off2', T(3)), 'покупатель');
+throws('просроченное не принять', () => M.acceptOffer(w, 'co4', 'off2', T(20)), 'действовало');
+let w2 = M.acceptOffer(w, 'co4', 'off2', T(3));
+const d = w2.deal;
+ok('сделка с Тараз, второе предложение отклонено', d.parties.supplier_id === 'co2' && w2.offers[0].status === 'REJECTED');
+ok('реквизиты поставщика в сделке — Тараз', d.companies.supplier.name === 'ТОО «Тараз Тәтті»' && d.companies.supplier.iban === 'KZ556010002000654321');
+ok('сумма договора = сумма предложения', d.deal.frame_limit === 32300);
+ok('товары в договоре — товары Тараз', D.contractFields(d).goods_name.includes('Вафли «Тараз»'));
+ok('источники полей: поставщик с оценкой подбора', M.contractSources(w2)[0][1].includes('/100'));
+ok('Алатау не участник сделки', M.dealRole(w2, 'co1') === null && M.nextActions(w2, 'co1')[0].text.includes('не участвует'));
+throws('не участник не может согласовать договор', () => M.approveContract(w2, 'co1', T(4)), 'не участвует');
 
-group('Согласование договора создаёт спецификацию №1 из предложения');
-w4 = M.approveContract(w4, 'supplier', T(4));
-ok('после одного согласования спецификации ещё нет', w4.deal.specs.length === 0);
-w4 = M.approveContract(w4, 'buyer', T(4));
-const sp = w4.deal.specs[0];
-ok('спецификация №1 создана и сразу согласована', sp && sp.status === 'AGREED');
-ok('позиции, количество и цены — из предложения', sp.items[0].qty === 10000 && sp.items[0].price === 2.3 && sp.items[1].price === 1.85);
-ok('требования покупателя и спецификация товара перенесены в «Иные условия»', sp.other_terms.includes('ЕАЭС') && sp.other_terms.includes('влажность'));
-ok('сразу выставлен счёт на аванс 30% = 10230', w4.deal.invoices.length === 1 && w4.deal.payments[0].amount === 10230, String(w4.deal.payments[0] && w4.deal.payments[0].amount));
-ok('событие «создана из RFQ и предложения» в хронологии', M.timeline(w4).some(e => e.type === 'SPEC_FROM_OFFER'));
-
-group('Дальше обычный поток сделки до исполнения');
-w4 = M.dealCmd(w4, s => D.markPaymentSent(s, 'buyer', 'pay1', { bank_reference: 'R1' }, T(5)));
-w4 = M.dealCmd(w4, s => D.confirmPayment(s, 'supplier', 'pay1', T(5)));
-w4 = M.dealCmd(w4, s => D.issueCMR(s, 'supplier', 'spec1', { vehicle: 'A1' }, T(6)));
-w4 = M.dealCmd(w4, s => D.confirmDelivery(s, 'buyer', 'cmr1', T(9)));
-w4 = M.dealCmd(w4, s => D.markPaymentSent(s, 'buyer', 'pay2', { bank_reference: 'R2' }, T(9)));
-w4 = M.dealCmd(w4, s => D.confirmPayment(s, 'supplier', 'pay2', T(10)));
-ok('исполнено от каталога до оплаты остатка', w4.deal.specs[0].status === 'FULFILLED');
-const tl = M.timeline(w4);
-ok('хронология объединяет RFQ и сделку по времени', tl[0].type === 'WORKSPACE_CREATED' && tl.some(e => e.type === 'RFQ_SENT') && tl.some(e => e.type === 'SPEC_FULFILLED'));
-const cmrTxt = D.cmrBlocks(w4.deal, 'cmr1').map(b => (b.rows || []).flat().join(' ')).join(' ');
-ok('CMR содержит товары, пришедшие из каталога', cmrTxt.includes('Вафли «Артек»') && cmrTxt.includes('1905.31'));
-
-group('Отказы и закрытие');
-throws('отказ без причины нельзя', () => M.declineRFQ(w, 'supplier', 'rfq1', '', T(2)), 'причину');
-ok('отказ с причиной', M.declineRFQ(w, 'supplier', 'rfq1', 'Нет мощностей в ноябре', T(2)).rfqs[0].status === 'DECLINED');
-ok('покупатель закрывает RFQ', M.closeRFQ(w2, 'buyer', 'rfq1', T(2)).rfqs[0].status === 'CLOSED');
+group('Согласование → спецификация из предложения → исполнение');
+w2 = M.approveContract(w2, 'co2', T(4));
+w2 = M.approveContract(w2, 'co4', T(4));
+const sp = w2.deal.specs[0];
+ok('спецификация №1 из предложения, согласована', sp && sp.status === 'AGREED' && sp.items[0].name === 'Вафли «Тараз»' && sp.items[0].price === 2.15);
+ok('требования и спецификация товара в «Иных условиях»', sp.other_terms.includes('Халал') && sp.other_terms.includes('влажность'));
+ok('аванс 30% = 9690', w2.deal.payments[0].amount === 9690, String(w2.deal.payments[0].amount));
+w2 = M.dealCmd(w2, 'co4', (s, role) => D.markPaymentSent(s, role, 'pay1', { bank_reference: 'R1' }, T(5)));
+w2 = M.dealCmd(w2, 'co2', (s, role) => D.confirmPayment(s, role, 'pay1', T(5)));
+w2 = M.dealCmd(w2, 'co2', (s, role) => D.issueCMR(s, role, 'spec1', { vehicle: 'A1' }, T(6)));
+w2 = M.dealCmd(w2, 'co4', (s, role) => D.confirmDelivery(s, role, 'cmr1', T(9)));
+w2 = M.dealCmd(w2, 'co4', (s, role) => D.markPaymentSent(s, role, 'pay2', { bank_reference: 'R2' }, T(9)));
+w2 = M.dealCmd(w2, 'co2', (s, role) => D.confirmPayment(s, role, 'pay2', T(10)));
+ok('исполнено от регистрации до оплаты остатка', w2.deal.specs[0].status === 'FULFILLED');
+ok('роли в сделке проверяются: покупатель не выписывает CMR', (() => { try { M.dealCmd(w2, 'co4', (s, role) => D.issueCMR(s, role, 'spec1', { vehicle: 'A' }, T(10))); return false; } catch (e) { return e.message.includes('Поставщик'); } })());
+const tl = M.timeline(w2);
+ok('хронология от каталога до исполнения', tl.some(e => e.type === 'RFQ_SENT') && tl.some(e => e.type === 'SPEC_FULFILLED'));
+ok('имя актора в хронологии по компании', M.actorName(w2, 'supplier') === 'ТОО «Тараз Тәтті»' && M.actorName(w2, 'co4') === 'ООО «Восток»');
+const cmrTxt = D.cmrBlocks(w2.deal, 'cmr1').map(b => (b.rows || []).flat().join(' ')).join(' ');
+ok('CMR: отправитель Тараз, товары Тараз', cmrTxt.includes('Тараз Тәтті') && cmrTxt.includes('Печенье овсяное'));
 
 console.log(`\n${pass} пройдено, ${fail} провалено`);
 process.exit(fail ? 1 : 0);

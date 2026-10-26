@@ -79,6 +79,15 @@
   .src{font-size:11.5px;color:var(--buyer);background:var(--buyer-bg);border-radius:4px;padding:1px 6px;white-space:nowrap}
   .offer{border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:10px}
   .muted-tab{opacity:.45}
+  .who{display:flex;gap:8px;align-items:center}
+  .who select{width:auto;min-width:260px;margin:0}
+  .bar{height:8px;background:#efeeea;border-radius:5px;overflow:hidden;width:120px;display:inline-block;vertical-align:middle;margin-right:6px}
+  .bar i{display:block;height:100%;background:var(--accent)}
+  .factors{font-size:12.5px;color:var(--muted);margin:4px 0 0;padding-left:16px}
+  .factors li{margin:1px 0}
+  .best{color:#1f5d3a;font-weight:600}
+  .sup-head{display:flex;justify-content:space-between;gap:10px;align-items:baseline;margin:14px 0 6px}
+  .sup-head h4{margin:0;font-size:14.5px}
   @media (max-width:860px){.stats{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}.timeline li{grid-template-columns:1fr}}
 </style>
 </head>
@@ -87,11 +96,8 @@
   <h1>TWH · Trading Ways Hub</h1>
   <span class="ref" id="dealref"></span>
   <span class="sp"></span>
-  <span class="note">Вы действуете как</span>
-  <div class="roles" id="roles">
-    <button data-role="supplier" class="supplier">Поставщик</button>
-    <button data-role="buyer" class="buyer">Покупатель</button>
-  </div>
+  <div class="who"><span class="note">Вы действуете как</span><select id="acting"></select>
+    <button id="goReg">+ Компания</button></div>
   <button id="reset" title="Начать демо заново">Сбросить демо</button>
 </header>
 
@@ -100,15 +106,16 @@
   <section class="stats" id="stats"></section>
   <nav class="tabs" id="tabs">
     <button data-tab="catalog">Каталог</button>
-    <button data-tab="rfq">Запросы (RFQ)</button>
+    <button data-tab="rfq">Запросы и подбор</button>
     <button data-tab="contract" data-deal="1">Договор</button>
     <button data-tab="specs" data-deal="1">Спецификации</button>
     <button data-tab="payments" data-deal="1">Счета и оплата</button>
     <button data-tab="transport" data-deal="1">Транспорт</button>
     <button data-tab="timeline">Хронология</button>
+    <button data-tab="companies">Компании</button>
   </nav>
   <section id="view"></section>
-  <p class="note">Прототип v0.3 по архитектуре TWH v0.1. TWH не принимает и не хранит деньги: платёж здесь — цифровой двойник внешнего банковского перевода. Данные хранятся только в этом браузере. <a href="../">Генератор договора</a></p>
+  <p class="note">Прототип v0.4 по архитектуре TWH v0.1. Вход без пароля: компания выбирается вверху. TWH не принимает и не хранит деньги: платёж здесь — цифровой двойник внешнего банковского перевода. Данные хранятся только в этом браузере. <a href="../">Генератор договора</a></p>
 </main>
 
 <dialog id="dlg"><div class="dh"><b id="dlgTitle"></b><span class="sp"></span><button id="dlgDocx" class="primary">Скачать DOCX</button><button id="dlgClose">Закрыть</button></div><div class="doc" id="dlgBody"></div></dialog>
@@ -120,40 +127,48 @@
   const esc = t => String(t == null ? '' : t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const money = (v, c) => (Number(v)||0).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' ' + (c||'');
   const num = v => (Number(v)||0).toLocaleString('ru-RU');
-  const KEY = 'twh-workspace-v3';
-  const today = () => new Date().toISOString().slice(0,10);
+  const KEY = 'twh-workspace-v4';
   const plusDays = d => new Date(Date.now()+d*864e5).toISOString().slice(0,10);
 
-  const SEED = {
-    companies: {
-      supplier: { name: 'ТОО «Кондитерский дом Алатау»', country: 'Казахстан', reg: 'БИН 041240004821',
-        rep: 'Ахметов А.К., директор', basis: 'Устава', address: 'г. Алматы, ул. Розыбакиева 247',
-        bank: 'АО «Halyk Bank»', iban: 'KZ123456789012345678', swift: 'HSBKKZKX' },
-      buyer: { name: 'ООО «Торговый дом Восток»', country: 'Узбекистан', reg: 'ИНН 302456789',
-        rep: 'Каримов Ш.Р., генеральный директор', basis: 'Устава', address: 'г. Ташкент, ул. Амира Темура 15',
-        bank: 'АКБ «Ипотека-банк»', iban: 'UZ987654321098765432', swift: 'IPTBUZ22' }
-    },
-    catalog: [
-      { name: 'Вафли сахарные «Артек»', description: 'Классические вафли с жировой начинкой, короб 5 кг, 12 коробов на паллете', hs: '1905.32', unit: 'кг', price: 2.35, moq: 2000, packaging: 'Гофротара (картон), 5 кг', shelf_life_months: 9, standard: 'СТ РК 1183-2003', compliance: ['Декларация ЕАЭС', 'Удостоверение качества'] },
-      { name: 'Печенье сахарное «Юбилейное»', description: 'Сахарное печенье, короб 4 кг', hs: '1905.31', unit: 'кг', price: 1.90, moq: 1000, packaging: 'Гофротара (картон), 4 кг', shelf_life_months: 6, standard: 'ГОСТ 24901-2014', compliance: ['Декларация ЕАЭС', 'Халал'] },
-      { name: 'Пряники «Тульские» с начинкой', description: 'Печатные пряники с повидлом, короб 3 кг', hs: '1905.90.20', unit: 'кг', price: 2.10, moq: 1000, packaging: 'Гофротара (картон), 3 кг', shelf_life_months: 4, standard: 'ГОСТ 15810-2014', compliance: ['Декларация ЕАЭС'] },
-      { name: 'Вафельные трубочки со сгущёнкой', description: 'Трубочки в индивидуальной упаковке, короб 2,5 кг', hs: '1905.32', unit: 'кг', price: 3.40, moq: 500, packaging: 'Гофротара (картон), 2,5 кг', shelf_life_months: 6, standard: 'СТ РК 1183-2003', compliance: ['Декларация ЕАЭС', 'Халал', 'ISO 22000'] }
-    ]
-  };
+  /* Демо-данные вымышленные. БИН и IBAN — только правильного формата. */
+  const SEED = { companies: [
+    { role:'supplier', name:'ТОО «Кондитерский дом Алатау»', country:'Казахстан', reg:'041240004821', email:'sales@alatau-demo.kz', city:'Алматы',
+      rep:'Ахметов А.К., директор', address:'г. Алматы, ул. Розыбакиева 247', bank:'АО «Halyk Bank»', iban:'KZ123456789012345678', swift:'HSBKKZKX',
+      certs:['eaeu_decl','quality_cert','gost'], export_to:['UZ','KG','RU'], lead_time_days:12,
+      products:[
+        { name:'Вафли сахарные «Артек»', description:'Вафли с жировой начинкой, короб 5 кг', hs:'1905.32', unit:'кг', price:2.35, moq:2000, packaging:'Гофротара (картон), 5 кг', shelf_life_months:9, standard:'СТ РК 1183-2003' },
+        { name:'Печенье сахарное «Юбилейное»', description:'Сахарное печенье, короб 4 кг', hs:'1905.31', unit:'кг', price:1.90, moq:1000, packaging:'Гофротара (картон), 4 кг', shelf_life_months:6, standard:'ГОСТ 24901-2014' },
+        { name:'Пряники «Тульские» с начинкой', description:'Печатные пряники с повидлом, короб 3 кг', hs:'1905.90.20', unit:'кг', price:2.10, moq:1000, packaging:'Гофротара (картон), 3 кг', shelf_life_months:4, standard:'ГОСТ 15810-2014' } ] },
+    { role:'supplier', name:'ТОО «Тараз Тәтті»', country:'Казахстан', reg:'150540011223', email:'export@taraz-demo.kz', city:'Тараз',
+      rep:'Сейткали Н.Б., директор', address:'г. Тараз, пр. Жамбыла 12', bank:'АО «Bank RBK»', iban:'KZ556010002000654321', swift:'KINCKZKA',
+      certs:['eaeu_decl','quality_cert','halal'], export_to:['UZ','TJ'], lead_time_days:20,
+      products:[
+        { name:'Вафли «Тараз» с какао', description:'Вафли с какао-начинкой, короб 4 кг', hs:'1905.32', unit:'кг', price:2.15, moq:5000, packaging:'Гофротара (картон), 4 кг', shelf_life_months:8, standard:'СТ РК 1183-2003' },
+        { name:'Печенье овсяное', description:'Овсяное печенье, короб 3 кг', hs:'1905.31', unit:'кг', price:1.80, moq:3000, packaging:'Гофротара (картон), 3 кг', shelf_life_months:5, standard:'ГОСТ 24901-2014' } ] },
+    { role:'supplier', name:'ТОО «Шымкент Кондитер»', country:'Казахстан', reg:'090340012345', email:'info@shymkent-demo.kz', city:'Шымкент',
+      rep:'Абенов Е.С., директор', address:'г. Шымкент, ул. Байтурсынова 5', bank:'АО «ForteBank»', iban:'KZ986010002000123456', swift:'IRTYKZKA',
+      certs:['eaeu_decl','halal','iso22000'], export_to:[], lead_time_days:45,
+      products:[
+        { name:'Вафельные трубочки со сгущёнкой', description:'Трубочки в индивидуальной упаковке, короб 2,5 кг', hs:'1905.32', unit:'кг', price:3.40, moq:500, packaging:'Гофротара (картон), 2,5 кг', shelf_life_months:6, standard:'СТ РК 1183-2003' } ] },
+    { role:'buyer', name:'ООО «Торговый дом Восток»', country:'Узбекистан', reg:'ИНН 302456789', email:'buy@vostok-demo.uz',
+      rep:'Каримов Ш.Р., генеральный директор', address:'г. Ташкент, ул. Амира Темура 15', bank:'АКБ «Ипотека-банк»', iban:'UZ987654321098765432', swift:'IPTBUZ22' }
+  ] };
 
   const nowIso = () => new Date().toISOString();
   const load = () => { try { const r = localStorage.getItem(KEY); return r ? JSON.parse(r) : null; } catch(e){ return null; } };
-  const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ W, role, tab })); } catch(e){} };
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ W, acting, tab, basket })); } catch(e){} };
   const saved = load();
-  let W = saved && saved.W && saved.W.v === 3 ? saved.W : MARKET.createWorkspace(SEED, nowIso());
-  let role = (saved && saved.role) || 'buyer';
+  let W = saved && saved.W && saved.W.v === 4 ? saved.W : MARKET.createWorkspace(SEED, nowIso());
+  let acting = (saved && saved.acting) || W.companies.find(c => c.role === 'buyer').id;
   let tab = (saved && saved.tab) || 'catalog';
-  let basket = {};      // product_id -> {qty, spec}
+  let basket = (saved && saved.basket) || [];   // строки будущего RFQ
+  const me = () => MARKET.company(W, acting);
   const DL = () => W.deal;
+  const myRole = () => MARKET.dealRole(W, acting);
 
-  function toast(msg, bad){ const t=$('toast'); t.textContent=msg; t.className=bad?'bad':''; t.style.display='block'; clearTimeout(toast._t); toast._t=setTimeout(()=>t.style.display='none', bad?6500:3200); }
+  function toast(msg, bad){ const t=$('toast'); t.textContent=msg; t.className=bad?'bad':''; t.style.display='block'; clearTimeout(toast._t); toast._t=setTimeout(()=>t.style.display='none', bad?7000:3200); }
   function run(fn, okMsg){ try { W = fn(W); save(); render(); if (okMsg) toast(okMsg); return true; } catch(e){ if (e instanceof DEAL.DealError){ toast(e.message, true); return false; } throw e; } }
-  const deal = (fn, okMsg) => run(w => MARKET.dealCmd(w, fn), okMsg);
+  const deal = (fn, okMsg) => run(w => MARKET.dealCmd(w, acting, fn), okMsg);
 
   /* ---------- документы ---------- */
   let dlgDoc = null;
@@ -178,28 +193,32 @@
   const docInv = id => { const i=DL().invoices.find(x=>x.id===id); openDoc('Счёт '+i.number, DEAL.invoiceBlocks(DL(),id), i.number+'.docx'); };
   const docCmr = id => { const c=DL().cmrs.find(x=>x.id===id); openDoc(c.number, DEAL.cmrBlocks(DL(),id), c.number+'.docx'); };
 
-  /* ---------- «Ваш ход» ---------- */
+  /* ---------- шапка, «Ваш ход», цифры ---------- */
+  function renderActing(){
+    const opt = role => W.companies.filter(c => c.role === role).map(c => `<option value="${c.id}" ${c.id===acting?'selected':''}>${esc(c.name)}</option>`).join('');
+    $('acting').innerHTML = `<optgroup label="Покупатели">${opt('buyer')}</optgroup><optgroup label="Поставщики">${opt('supplier')}</optgroup>`;
+  }
   function renderTurn(){
-    const acts = MARKET.nextActions(W, role);
-    let html = `<h2>Ваш ход · ${esc(DEAL.ACTORS[role])}</h2><div class="acts">`;
-    if (!acts.length) html += `<div class="wait">Сейчас от вас ничего не требуется. Переключитесь на другую сторону.</div>`;
+    const acts = MARKET.nextActions(W, acting);
+    const c = me();
+    let html = `<h2>Ваш ход · ${esc(c ? c.name : '—')}${c ? ' · ' + esc(MARKET.ROLE_RU[c.role].toLowerCase()) : ''}</h2><div class="acts">`;
+    if (!acts.length) html += `<div class="wait">Сейчас от вас ничего не требуется. Выберите другую компанию вверху.</div>`;
     acts.forEach((a,i) => {
       if (a.kind==='wait') html += `<div class="wait">${esc(a.text)}</div>`;
+      else if (a.kind==='register') html += `<div class="act"><span>${esc(a.text)}</span><button class="primary" data-goto="companies">Регистрация</button></div>`;
       else if (a.kind==='goto_catalog') html += `<div class="act"><span>${esc(a.text)}</span><button class="primary" data-goto="catalog">Открыть каталог</button></div>`;
-      else if (a.kind==='answer_rfq') html += `<div class="act"><span>${esc(a.text)}</span><button class="primary" data-goto="rfq">Открыть запрос</button></div>`;
-      else if (a.kind==='review_offer') html += `<div class="act"><span>${esc(a.text)}</span><button class="primary" data-goto="rfq">Сравнить и решить</button></div>`;
+      else if (a.kind==='goto_rfq') html += `<div class="act"><span>${esc(a.text)}</span><button class="primary" data-goto="rfq">Открыть</button></div>`;
       else if (a.kind==='pay') html += `<div class="act"><span>${esc(a.text)}</span><input id="ref_${i}" placeholder="Референс SWIFT / п/п"><button class="primary" data-act="pay" data-id="${a.id}" data-i="${i}">Отметить оплату</button></div>`;
       else if (a.kind==='ship') html += `<div class="act"><span>${esc(a.text)}</span><input id="veh_${i}" placeholder="Госномер тягача / прицепа"><button class="primary" data-act="ship" data-id="${a.id}" data-i="${i}">Выписать CMR</button></div>`;
       else html += `<div class="act"><span>${esc(a.text)}</span><button class="primary" data-act="${a.kind}" data-id="${a.id||''}">Сделать</button></div>`;
     });
     $('turn').innerHTML = html + '</div>';
   }
-
   function renderStats(){
     if (!DL()) {
       const r = W.rfqs[W.rfqs.length-1];
-      $('stats').innerHTML = [['Товаров в каталоге', W.catalog.length], ['Запросов (RFQ)', W.rfqs.length], ['Предложений', W.offers.length],
-        ['Статус запроса', r ? MARKET.RFQ_STATUS_RU[r.status] : 'нет'], ['Сделка', 'после принятия предложения']]
+      $('stats').innerHTML = [['Компаний', W.companies.length], ['Поставщиков', W.companies.filter(c=>c.role==='supplier').length], ['Товаров в каталоге', W.catalog.length],
+        ['Запрос', r ? MARKET.RFQ_STATUS_RU[r.status] : 'нет'], ['Предложений', W.offers.filter(o=>o.status==='SUBMITTED').length]]
         .map(([k,v])=>`<div class="stat"><div class="k">${k}</div><div class="v" style="font-size:15px">${esc(v)}</div></div>`).join('');
       return;
     }
@@ -211,50 +230,59 @@
   const pill = (text, kind) => `<span class="pill ${kind||''}">${esc(text)}</span>`;
   const specPill = st => pill(DEAL.SPEC_STATUS_RU[st], st==='FULFILLED'?'good':(st==='IN_REVIEW'?'mid':'blue'));
   const payPill = st => pill(DEAL.PAYMENT_STATUS_RU[st], st==='RECONCILED'?'good':(['AWAITING_PAYMENT','PAID_UNCONFIRMED'].includes(st)?'mid':(st==='HELD_IN_ESCROW'?'blue':'')));
-  const approvals = obj => ['supplier','buyer'].map(r => `${DEAL.ACTORS[r]}: ${obj.approvals[r]===obj.version?'✓ согласовал':'— ждём'}`).join(' · ');
   const opts = (list, cur) => list.map(([v,t])=>`<option value="${esc(v)}" ${v===cur?'selected':''}>${esc(t)}</option>`).join('');
-  const noDeal = () => `<div class="panel note">Сделка появится, когда покупатель примет предложение поставщика по RFQ. Тогда договор, спецификация, счета и CMR соберутся из уже введённых данных.</div>`;
+  const noDeal = () => `<div class="panel note">Сделка появится, когда покупатель примет одно из предложений поставщиков. Тогда договор, спецификация, счета и CMR соберутся из уже введённых данных.</div>`;
+  const compShort = id => (MARKET.COMPLIANCE.find(c=>c.id===id)||{short:id}).short;
 
   /* ---------- каталог ---------- */
   function vCatalog(){
-    const openRfq = W.rfqs.some(r => ['SENT','OFFERED'].includes(r.status));
-    const cards = W.catalog.map(p => {
-      const b = basket[p.id];
-      const buyerBox = role==='buyer' && !W.deal && !openRfq ? `<div class="row"><label>Количество, ${esc(p.unit)} (мин. ${num(p.moq)})<input type="number" data-qty="${p.id}" value="${b?b.qty:''}" placeholder="0"></label></div>
-        <label>Требования к товару (Specification)<input data-specfor="${p.id}" value="${esc(b?b.spec:'')}" placeholder="напр. влажность ≤ 4,5%"></label>` : '';
-      return `<div class="card ${b && b.qty>0 ? 'sel':''}"><div class="note">${esc(p.sku)} · ТН ВЭД ${esc(p.hs)}</div><h4>${esc(p.name)}</h4>
-        <div class="note">${esc(p.description)}</div>
-        <div class="price">${money(p.price, p.currency)} / ${esc(p.unit)}</div>
-        <div class="note">Мин. партия ${num(p.moq)} ${esc(p.unit)} · срок годности ${p.shelf_life_months||'—'} мес. · ${esc(p.standard)}</div>
-        <div class="note">Происхождение: ${esc(p.origin)} · ${esc(p.packaging)}</div>
-        <div class="chips">${p.compliance.map(c=>pill(c)).join('')}</div>${buyerBox}</div>`;
+    const c = me(); const isBuyer = c && c.role === 'buyer';
+    const openRfq = W.rfqs.some(r => r.buyer_id === acting && ['DRAFT','SENT'].includes(r.status));
+    const canBuild = isBuyer && !W.deal && !openRfq;
+    const sups = W.companies.filter(x => x.role === 'supplier');
+    const blocks = sups.map(s => {
+      const prods = W.catalog.filter(p => p.supplier_id === s.id);
+      if (!prods.length) return '';
+      const cards = prods.map(p => {
+        const inBasket = basket.some(l => l.from_product === p.id);
+        return `<div class="card ${inBasket?'sel':''}"><div class="note">${esc(p.sku)} · ТН ВЭД ${esc(p.hs)}</div><h4>${esc(p.name)}</h4>
+          <div class="note">${esc(p.description)}</div>
+          <div class="price">${money(p.price, p.currency)} / ${esc(p.unit)}</div>
+          <div class="note">Мин. партия ${num(p.moq)} ${esc(p.unit)} · срок годности ${p.shelf_life_months||'—'} мес. · ${esc(p.standard)}</div>
+          ${canBuild ? (inBasket ? `<button data-unbasket="${p.id}">Убрать из запроса</button>` : `<button class="primary" data-basket="${p.id}">+ В запрос</button>`) : ''}</div>`;
+      }).join('');
+      return `<div class="sup-head"><h4>${esc(s.name)}${s.id===acting?' (вы)':''}</h4><span class="note">${esc(s.city||s.country)} · обычно отгружает за ${s.lead_time_days} дн. · ${s.certs.map(compShort).join(', ')||'сертификаты не указаны'}</span></div><div class="cards">${cards}</div>`;
     }).join('');
     let form = '';
-    if (role==='buyer' && !W.deal && !openRfq) form = rfqForm();
-    else if (role==='buyer' && openRfq) form = `<div class="panel note">RFQ уже отправлен поставщику. Статус — на вкладке «Запросы (RFQ)».</div>`;
+    if (canBuild) form = rfqForm();
+    else if (isBuyer && openRfq) form = `<div class="panel note">Запрос уже создан. Подбор и предложения — на вкладке «Запросы и подбор».</div>`;
     let supForm = '';
-    if (role==='supplier') supForm = `<div class="panel"><h3>Опубликовать товар</h3><div class="row">
+    if (c && c.role === 'supplier') supForm = `<div class="panel"><h3>Опубликовать товар</h3><div class="row">
       <label>Наименование<input id="p_name" placeholder="Печенье овсяное"></label><label>ТН ВЭД<input id="p_hs" value="1905.31"></label>
       <label>Цена, USD<input id="p_price" type="number" step="0.01" value="1.75"></label><label>Ед.<input id="p_unit" value="кг"></label>
       <label>Мин. партия<input id="p_moq" type="number" value="1000"></label><label>Срок годности, мес.<input id="p_shelf" type="number" value="6"></label>
       <button id="p_add">Опубликовать</button></div></div>`;
-    return `<div class="panel"><h3>Каталог поставщика · ${esc(W.companies.supplier.name)}</h3>
-      <p class="note">${role==='buyer'?'Укажите количество у нужных товаров, ниже заполните условия и отправьте RFQ.':'Так ваши товары видят покупатели.'}</p>
-      <div class="cards">${cards}</div></div>${form}${supForm}`;
+    return `<div class="panel"><h3>Каталог поставщиков</h3>
+      <p class="note">${canBuild ? 'Добавьте нужные товары в запрос. Система подберёт и других поставщиков с такими же товарами и сравнит их.' : 'Товары всех зарегистрированных поставщиков.'}</p>${blocks}</div>${form}${supForm}`;
   }
 
   function rfqForm(){
-    const chosen = W.catalog.filter(p => basket[p.id] && basket[p.id].qty > 0);
-    const route = (window.__rf && window.__rf.route) || 'UZ', inc = (window.__rf && window.__rf.inc) || 'DAP';
-    const docs = MARKET.defaultDocuments(W, route, inc);
-    const total = chosen.reduce((a,p)=>a+p.price*basket[p.id].qty,0);
+    const st = window.__rf || { route:'UZ', inc:'DAP' };
+    const docs = MARKET.defaultDocuments(st.route, st.inc);
+    const hsList = RULES.categories.bakery.hs_codes;
+    const rows = basket.map((l,i) => `<tr>
+      <td>${esc(l.name)}<div class="note">ТН ВЭД ${esc(l.hs)}</div></td>
+      <td style="width:120px"><input type="number" data-line="${i}" data-f="qty" value="${l.qty}"></td>
+      <td style="width:120px"><input type="number" step="0.01" data-line="${i}" data-f="target_price" value="${l.target_price||''}" placeholder="—"></td>
+      <td><input data-line="${i}" data-f="specification" value="${esc(l.specification||'')}" placeholder="напр. влажность ≤ 4,5%"></td>
+      <td style="width:40px"><button class="link" data-rmline="${i}">×</button></td></tr>`).join('');
     return `<div class="panel"><h3>Новый запрос предложения (RFQ)</h3>
-      ${chosen.length ? `<table class="t"><tr><th>Product</th><th>Quantity</th><th>Specification</th><th>Origin</th><th>По прайсу</th></tr>${chosen.map(p=>`<tr><td>${esc(p.name)}</td><td>${num(basket[p.id].qty)} ${esc(p.unit)}</td><td>${esc(basket[p.id].spec||'—')}</td><td>${esc(p.origin)}</td><td>${money(p.price*basket[p.id].qty,p.currency)}</td></tr>`).join('')}
-        <tr><td colspan="4" style="text-align:right"><b>Ориентир по прайсу</b></td><td><b>${money(total,'USD')}</b></td></tr></table>` : '<p class="note">Пока не выбран ни один товар: укажите количество в карточках выше.</p>'}
+      ${basket.length ? `<table class="t"><tr><th>Product</th><th>Quantity, кг</th><th>Целевая цена</th><th>Specification</th><th></th></tr>${rows}</table>` : '<p class="note">Пока пусто. Добавьте товары из каталога выше или позицию по коду ТН ВЭД.</p>'}
+      <div class="row" style="margin-top:8px"><label>Позиция по коду ТН ВЭД<select id="r_hs">${opts(hsList.map(h=>[h.code, h.code+' — '+h.ru]), '')}</select></label><button id="r_addhs">+ Позиция</button></div>
       <div class="row" style="margin-top:10px">
-        <label>Destination (страна)<select id="r_route">${opts(Object.entries(RULES.routes).map(([k,r])=>[k,r.name_ru]), route)}</select></label>
+        <label>Destination (страна)<select id="r_route">${opts(Object.entries(RULES.routes).map(([k,r])=>[k,r.name_ru]), st.route)}</select></label>
         <label>Место поставки<input id="r_place" value="г. Ташкент, ул. Амира Темура 15, склад Покупателя"></label>
-        <label>Incoterm<select id="r_inc">${opts(Object.keys(RULES.incoterms).filter(k=>RULES.incoterms[k].road_ok).map(k=>[k,k]), inc)}</select></label>
+        <label>Incoterm<select id="r_inc">${opts(Object.keys(RULES.incoterms).filter(k=>RULES.incoterms[k].road_ok).map(k=>[k,k]), st.inc)}</select></label>
       </div><div class="row">
         <label>Currency<select id="r_cur">${opts([['USD','USD'],['EUR','EUR'],['KZT','KZT'],['RUB','RUB']],'USD')}</select></label>
         <label>Payment Terms<select id="r_pay">${opts(RULES.payment_presets.map(p=>[p.id,p.label]),'30_70')}</select></label>
@@ -262,43 +290,78 @@
         <label>Offer Deadline<input id="r_dead" type="date" value="${plusDays(3)}"></label>
       </div>
       <div style="margin-top:8px"><b style="font-size:13px">Compliance Attributes</b><div class="checks">${MARKET.COMPLIANCE.map(c=>`<label><input type="checkbox" data-comp="${c.id}" ${['eaeu_decl','shelf_75'].includes(c.id)?'checked':''}>${esc(c.ru)}</label>`).join('')}</div></div>
-      <div class="note" id="r_docs"><b>Documents</b> (по правилам маршрута, уйдут в договор и спецификацию): ${esc(docs.join('; '))}</div>
-      <p><button class="primary" id="r_send">Отправить RFQ поставщику</button></p></div>`;
+      <div class="note" id="r_docs"><b>Documents</b> (по правилам маршрута): ${esc(docs.join('; '))}</div>
+      <p><button class="primary" id="r_create">Подобрать поставщиков</button></p></div>`;
   }
 
-  /* ---------- запросы и предложения ---------- */
+  /* ---------- запросы, подбор, предложения ---------- */
+  function rfqFields(r){
+    const comp = r.compliance.map(c => (MARKET.COMPLIANCE.find(x=>x.id===c)||{ru:c}).ru);
+    return [['Покупатель', MARKET.company(W, r.buyer_id).name],
+      ['Product / Quantity / Specification', r.lines.map(l=>`${l.name} (ТН ВЭД ${l.hs}) — ${num(l.qty)} ${l.unit}${l.specification?' ('+l.specification+')':''}${l.target_price?', цель '+money(l.target_price, r.currency):''}`).join('; ')],
+      ['Destination', `${r.destination_country}, ${r.delivery_place}`], ['Incoterm', r.incoterms], ['Currency', r.currency],
+      ['Payment Terms', (RULES.payment_presets.find(p=>p.id===r.payment_preset)||{}).label], ['Delivery Terms', `автотранспорт, поставка до ${r.delivery_date}`],
+      ['Documents', r.documents.join('; ')], ['Compliance Attributes', comp.join('; ')||'—'], ['Offer Deadline', r.offer_deadline]];
+  }
+  const fieldsTable = r => `<table class="t">${rfqFields(r).map(([k,v])=>`<tr><td style="width:230px" class="note">${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</table>`;
+  const scoreBar = s => `<span class="bar"><i style="width:${s}%"></i></span><b>${s}</b>/100`;
+  const factorList = m => `<ul class="factors">${m.factors.map(f=>`<li>${esc(f.label)}: ${f.points}/${f.max} — ${esc(f.note)}</li>`).join('')}</ul>`;
+
   function vRfq(){
-    if (!W.rfqs.length) return `<div class="panel note">Запросов пока нет. Покупатель создаёт RFQ из каталога.</div>`;
-    return W.rfqs.slice().reverse().map(r => {
-      const offers = W.offers.filter(o => o.rfq_id === r.id);
-      const live = offers.find(o => o.status === 'SUBMITTED');
-      const comp = r.compliance.map(c => (MARKET.COMPLIANCE.find(x=>x.id===c)||{ru:c}).ru);
-      const fields = [['Product / Quantity / Specification', r.items.map(i=>`${i.name} — ${num(i.qty)} ${i.unit}${i.specification?' ('+i.specification+')':''}`).join('; ')],
-        ['Origin', r.origin], ['Destination', `${r.destination_country}, ${r.delivery_place}`], ['Incoterm', r.incoterms], ['Currency', r.currency],
-        ['Payment Terms', (RULES.payment_presets.find(p=>p.id===r.payment_preset)||{}).label], ['Delivery Terms', `автотранспорт, поставка до ${r.delivery_date}`],
-        ['Documents', r.documents.join('; ')], ['Compliance Attributes', comp.join('; ')||'—'], ['Offer Deadline', r.offer_deadline]];
-      let action = '';
-      if (role==='supplier' && r.status==='SENT') {
-        action = `<div class="offer"><b>Ваше предложение</b><table class="t"><tr><th>Товар</th><th>Кол-во</th><th>Прайс</th><th>Ваша цена</th></tr>${r.items.map((i,k)=>`<tr><td>${esc(i.name)}</td><td>${num(i.qty)} ${esc(i.unit)}</td><td>${money(i.list_price,r.currency)}</td><td style="width:140px"><input type="number" step="0.01" id="o_p${k}" value="${i.list_price}"></td></tr>`).join('')}</table>
-          <div class="row" style="margin-top:8px"><label>Срок отгрузки, дней<input id="o_lead" type="number" value="14"></label><label>Предложение действует до<input id="o_valid" type="date" value="${plusDays(7)}"></label>
-          <label>Комментарий<input id="o_note" placeholder="напр. цена с учётом паллетирования"></label>
-          <button class="primary" data-offer="${r.id}">Отправить предложение</button></div>
-          <div class="row" style="margin-top:8px"><label>Причина отказа<input id="o_reason" placeholder="напр. нет мощностей в ноябре"></label><button data-decline="${r.id}">Отклонить запрос</button></div></div>`;
+    const c = me(); if (!c) return `<div class="panel note">Выберите компанию вверху.</div>`;
+    if (c.role === 'buyer') return vRfqBuyer(c);
+    return vRfqSupplier(c);
+  }
+  function vRfqBuyer(c){
+    const mine = W.rfqs.filter(r => r.buyer_id === c.id);
+    if (!mine.length) return `<div class="panel note">Запросов пока нет. Добавьте товары в запрос на вкладке «Каталог».</div>`;
+    return mine.slice().reverse().map(r => {
+      let body = '';
+      if (r.status === 'DRAFT') {
+        const defaults = r.matches.filter(m=>m.complete).slice(0,3).map(m=>m.supplier_id);
+        body = `<h3 style="margin-top:14px">Подбор поставщиков</h3><p class="note">Оценка из шести критериев: ассортимент, документы, срок, цена, минимальная партия, опыт по направлению. Отметьте, кому отправить запрос.</p>
+          <table class="t"><tr><th></th><th>Поставщик</th><th>Оценка</th><th>Почему</th></tr>${r.matches.map(m=>{ const s=MARKET.company(W,m.supplier_id);
+            return `<tr><td><input type="checkbox" data-pick="${m.supplier_id}" ${defaults.includes(m.supplier_id)?'checked':''} ${m.complete?'':'disabled'}></td>
+              <td><b>${esc(s.name)}</b><div class="note">${esc(s.city||s.country)}${m.complete?'':' · есть не все позиции'}</div></td><td style="white-space:nowrap">${scoreBar(m.score)}</td><td>${factorList(m)}</td></tr>`; }).join('')}</table>
+          <p><button class="primary" data-send="${r.id}">Отправить запрос выбранным</button> <button data-close="${r.id}">Закрыть запрос</button></p>`;
+      } else {
+        const rec = r.recipients.map(x => `${esc(MARKET.company(W,x.supplier_id).name)}: ${pill(MARKET.RECIPIENT_STATUS_RU[x.status], x.status==='OFFERED'?'good':(x.status==='SENT'?'mid':''))}${x.decline_reason?' <span class="note">('+esc(x.decline_reason)+')</span>':''}`).join(' &nbsp; ');
+        const cmp = MARKET.compareOffers(W, r.id);
+        body = `<p class="note" style="margin-top:10px">Отправлено: ${rec}</p>` + (cmp.length ? `<h3 style="margin-top:14px">Сравнение предложений</h3>
+          <table class="t"><tr><th>Поставщик</th><th>Сумма</th><th>Отгрузка</th><th>Оценка подбора</th><th>Действует до</th><th></th></tr>${cmp.map(x=>{ const o=x.offer;
+            return `<tr><td><b>${esc(x.supplier.name)}</b><div class="note">${esc(o.ref)} · ${pill(MARKET.OFFER_STATUS_RU[o.status], o.status==='ACCEPTED'?'good':(o.status==='SUBMITTED'?'mid':''))}</div>
+              <div class="note">${r.lines.map((l,k)=>{ const p=W.catalog.find(z=>z.id===o.product_ids[k]); return `${esc(p.name)}: ${money(o.prices[k], r.currency)}`; }).join('; ')}</div></td>
+              <td>${x.cheapest?'<span class="best">':''}${money(o.total, r.currency)}${x.cheapest?' · лучшая</span>':`<div class="note">+${money(x.over_best, r.currency)} к лучшей</div>`}</td>
+              <td>${x.fastest?'<span class="best">':''}${o.lead_time_days} дн.${x.fastest?' · быстрее всех</span>':''}<div class="note">${o.meets_delivery?'успевает к сроку':'позже запрошенного срока'}</div></td>
+              <td style="white-space:nowrap">${scoreBar(x.score)}</td><td>${esc(o.valid_until)}</td>
+              <td>${o.status==='SUBMITTED'?`<button class="primary" data-accept="${o.id}">Принять</button> <button data-reject="${o.id}">Отклонить</button>`:''}</td></tr>`; }).join('')}</table>`
+          : '<p class="note">Предложений пока нет.</p>') + (r.status==='SENT'?`<p><button data-close="${r.id}">Закрыть запрос</button></p>`:'');
       }
-      const offerCards = offers.slice().reverse().map(o => {
-        const listTotal = r.items.reduce((a,i)=>a+i.list_price*i.qty,0);
-        const diff = o.total - listTotal;
-        return `<div class="offer"><b>${esc(o.ref)}</b> ${pill(MARKET.OFFER_STATUS_RU[o.status], o.status==='ACCEPTED'?'good':(o.status==='SUBMITTED'?'mid':''))}
-          <table class="t" style="margin-top:6px"><tr><th>Товар</th><th>Кол-во</th><th>Цена</th><th>Сумма</th></tr>${r.items.map((i,k)=>`<tr><td>${esc(i.name)}</td><td>${num(i.qty)} ${esc(i.unit)}</td><td>${money(o.prices[k],r.currency)}</td><td>${money(o.prices[k]*i.qty,r.currency)}</td></tr>`).join('')}
-          <tr><td colspan="3" style="text-align:right"><b>Итого</b></td><td><b>${money(o.total,r.currency)}</b></td></tr></table>
-          <div class="note">${diff<0?`Ниже прайса на ${money(-diff,r.currency)}`:(diff>0?`Выше прайса на ${money(diff,r.currency)}`:'По прайсу')} · отгрузка за ${o.lead_time_days} дн., до ${esc(o.ship_by)} · ${o.meets_delivery?'успевает к сроку':'<b>позже запрошенного срока</b>'} · действует до ${esc(o.valid_until)}${o.note?' · '+esc(o.note):''}</div>
-          ${role==='buyer' && o.status==='SUBMITTED' ? `<p><button class="primary" data-accept="${o.id}">Принять и создать сделку</button> <button data-reject="${o.id}">Отклонить</button></p>`:''}</div>`;
-      }).join('');
-      return `<div class="panel"><h3>${esc(r.ref)} ${pill(MARKET.RFQ_STATUS_RU[r.status], r.status==='ACCEPTED'?'good':(['SENT','OFFERED'].includes(r.status)?'mid':''))}</h3>
-        <table class="t">${fields.map(([k,v])=>`<tr><td style="width:230px" class="note">${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</table>
-        ${r.decline_reason?`<p class="note">Причина отказа: ${esc(r.decline_reason)}</p>`:''}
-        ${role==='buyer' && ['SENT','OFFERED'].includes(r.status)?`<p><button data-close="${r.id}">Закрыть запрос</button></p>`:''}
-        ${action}${offerCards}</div>`;
+      return `<div class="panel"><h3>${esc(r.ref)} ${pill(MARKET.RFQ_STATUS_RU[r.status], r.status==='ACCEPTED'?'good':(['DRAFT','SENT'].includes(r.status)?'mid':''))}</h3>${fieldsTable(r)}${body}</div>`;
+    }).join('');
+  }
+  function vRfqSupplier(c){
+    const inbox = W.rfqs.filter(r => r.recipients.some(x => x.supplier_id === c.id));
+    if (!inbox.length) return `<div class="panel note">Вам пока не отправляли запросов. Когда покупатель выберет вас в подборе, запрос появится здесь.</div>`;
+    return inbox.slice().reverse().map(r => {
+      const rec = r.recipients.find(x => x.supplier_id === c.id);
+      const m = r.matches.find(x => x.supplier_id === c.id);
+      const mine = W.offers.filter(o => o.rfq_id === r.id && o.supplier_id === c.id).slice().reverse();
+      const myProds = W.catalog.filter(p => p.supplier_id === c.id);
+      let form = '';
+      if (r.status === 'SENT' && rec.status === 'SENT') {
+        form = `<div class="offer"><b>Ваше предложение</b><table class="t"><tr><th>Позиция запроса</th><th>Кол-во</th><th>Ваш товар</th><th>Цена</th></tr>${r.lines.map((l,k)=>{
+            const cands = myProds.filter(p => String(p.hs).startsWith(l.hs) || l.hs.startsWith(p.hs)); const def = W.catalog.find(p=>p.id===m.product_ids[k]);
+            return `<tr><td>${esc(l.name)}<div class="note">ТН ВЭД ${esc(l.hs)}${l.target_price?' · цель покупателя '+money(l.target_price, r.currency):''}</div></td><td>${num(l.qty)} ${esc(l.unit)}</td>
+              <td><select id="o_prod${k}">${opts(cands.map(p=>[p.id, p.name+' ('+money(p.price,p.currency)+')']), def&&def.id)}</select></td>
+              <td style="width:130px"><input type="number" step="0.01" id="o_p${k}" value="${def?def.price:''}"></td></tr>`; }).join('')}</table>
+          <div class="row" style="margin-top:8px"><label>Срок отгрузки, дней<input id="o_lead" type="number" value="${c.lead_time_days}"></label><label>Предложение действует до<input id="o_valid" type="date" value="${plusDays(7)}"></label>
+            <label>Комментарий<input id="o_note" placeholder="напр. цена с учётом паллетирования"></label><button class="primary" data-offer="${r.id}">Отправить предложение</button></div>
+          <div class="row" style="margin-top:8px"><label>Причина отказа<input id="o_reason" placeholder="напр. нет мощностей в ноябре"></label><button data-decline="${r.id}">Отказаться</button></div></div>`;
+      }
+      const sent = mine.map(o => `<div class="offer"><b>${esc(o.ref)}</b> ${pill(MARKET.OFFER_STATUS_RU[o.status], o.status==='ACCEPTED'?'good':(o.status==='SUBMITTED'?'mid':''))} · ${money(o.total, r.currency)} · отгрузка за ${o.lead_time_days} дн.</div>`).join('');
+      return `<div class="panel"><h3>${esc(r.ref)} ${pill(MARKET.RECIPIENT_STATUS_RU[rec.status], rec.status==='OFFERED'?'good':(rec.status==='SENT'?'mid':''))}</h3>${fieldsTable(r)}
+        ${m?`<p class="note" style="margin-top:8px">Ваша оценка в подборе: ${m.score}/100</p>${factorList(m)}`:''}${form}${sent}</div>`;
     }).join('');
   }
 
@@ -309,20 +372,17 @@
     return `<table class="t"><tr><th>№</th><th>Дата</th><th>Позиций</th><th>Сумма</th><th>Поставка до</th><th>Статус</th><th></th></tr>` +
       d.specs.map(sp => `<tr><td>${sp.number}</td><td>${esc(sp.date)}</td><td>${sp.items.length}</td><td>${money(DEAL.specTotal(sp), d.deal.currency)}</td><td>${esc(sp.delivery_date)}</td><td>${specPill(sp.status)}</td><td><button class="link" data-doc="spec" data-id="${sp.id}">документ</button></td></tr>`).join('') + '</table>';
   }
+  const approvalsTxt = obj => ['supplier','buyer'].map(r => `${esc(MARKET.actorName(W, r))}: ${obj.approvals[r]===obj.version?'✓ согласовал':'— ждём'}`).join(' · ');
   function vContract(){
     if (!DL()) return noDeal();
     const d = DL(), src = MARKET.contractSources(W);
-    return `<div class="panel">
-      <h3>Договор ${esc(d.contract.number)}, версия ${d.contract.version}</h3>
-      <p>${pill(DEAL.CONTRACT_STATUS_RU[d.contract.status], d.contract.status==='AGREED'?'good':'mid')} <span class="note">${approvals(d.contract)}</span></p>
+    return `<div class="panel"><h3>Договор ${esc(d.contract.number)}, версия ${d.contract.version}</h3>
+      <p>${pill(DEAL.CONTRACT_STATUS_RU[d.contract.status], d.contract.status==='AGREED'?'good':'mid')} <span class="note">${approvalsTxt(d.contract)}</span></p>
       <p><button class="primary" data-doc="contract">Открыть договор</button></p></div>
-      ${src.length?`<div class="panel"><h3>Откуда взялись данные договора</h3><p class="note">Ничего не вводилось заново: всё пришло из каталога, RFQ, предложения и профилей компаний.</p>
+      ${src.length?`<div class="panel"><h3>Откуда взялись данные договора</h3><p class="note">Ничего не вводилось заново: всё пришло из регистрации компаний, каталога, подбора, RFQ и предложения.</p>
       <table class="t"><tr><th>Поле</th><th>Значение</th><th>Источник</th></tr>${src.map(([k,v,s])=>`<tr><td class="note">${esc(k)}</td><td>${esc(v)}</td><td><span class="src">${esc(s)}</span></td></tr>`).join('')}</table></div>`:''}`;
   }
-  function vSpecs(){
-    if (!DL()) return noDeal();
-    return `<div class="panel"><h3>Спецификации к договору</h3>${specsTable()}</div>`;
-  }
+  function vSpecs(){ return DL() ? `<div class="panel"><h3>Спецификации к договору</h3>${specsTable()}</div>` : noDeal(); }
   function vPayments(){
     if (!DL()) return noDeal();
     const d = DL();
@@ -345,54 +405,90 @@
       ${blocked.length?`<div class="panel"><h3>Почему отгрузка пока закрыта</h3>${blocked.map(x=>`<p>Спецификация №${x.sp.number}: ${esc(x.b.join(' '))}</p>`).join('')}</div>`:''}`;
   }
   function vTimeline(){
-    const items = MARKET.timeline(W).slice().reverse().map(e => `<li><span class="note">${esc(new Date(e.at).toLocaleString('ru-RU'))}</span><span class="who-${e.actor}">${esc(DEAL.ACTORS[e.actor]||'Система')}</span><span>${esc(e.text)}</span></li>`).join('');
-    return `<div class="panel"><h3>Хронология: от каталога до исполнения</h3><ul class="timeline">${items}</ul></div>`;
+    const items = MARKET.timeline(W).slice().reverse().map(e => `<li><span class="note">${esc(new Date(e.at).toLocaleString('ru-RU'))}</span><span class="${e.actor==='system'?'who-system':'who-supplier'}">${esc(MARKET.actorName(W, e.actor))}</span><span>${esc(e.text)}</span></li>`).join('');
+    return `<div class="panel"><h3>Хронология: от регистрации до исполнения</h3><ul class="timeline">${items}</ul></div>`;
+  }
+
+  /* ---------- компании и регистрация ---------- */
+  function vCompanies(){
+    const rows = W.companies.map(c => `<tr><td><b>${esc(c.name)}</b>${c.id===acting?' (вы)':''}<div class="note">${esc(c.email)}</div></td><td>${esc(MARKET.ROLE_RU[c.role])}</td><td>${esc(c.country)}<div class="note">${esc(c.reg)}</div></td>
+      <td class="note">${c.role==='supplier'?`${c.certs.map(compShort).join(', ')||'—'}<br>экспорт: ${c.export_to.map(k=>RULES.routes[k].name_ru).join(', ')||'не указан'} · ${c.lead_time_days} дн.`:'—'}</td>
+      <td><button data-actas="${c.id}">Войти как</button></td></tr>`).join('');
+    const routes = Object.entries(RULES.routes).filter(([k])=>k!=='OTHER');
+    return `<div class="panel"><h3>Зарегистрированные компании</h3><table class="t"><tr><th>Компания</th><th>Роль</th><th>Страна, рег. №</th><th>Сертификаты и экспорт</th><th></th></tr>${rows}</table></div>
+    <div class="panel" id="regPanel"><h3>Регистрация компании</h3>
+      <div class="row"><label>Роль<select id="g_role"><option value="buyer">Покупатель</option><option value="supplier">Поставщик</option></select></label>
+        <label>Наименование<input id="g_name" placeholder="ТОО «Название»"></label>
+        <label>Страна<select id="g_country">${opts([['Казахстан','Казахстан'],['Узбекистан','Узбекистан'],['Кыргызстан','Кыргызстан'],['Россия','Россия'],['Таджикистан','Таджикистан'],['Другая','Другая']],'Казахстан')}</select></label>
+        <label>БИН / рег. №<input id="g_reg" placeholder="12 цифр для Казахстана"></label></div>
+      <div class="row"><label>E-mail<input id="g_email" placeholder="sales@company.kz"></label><label>Представитель<input id="g_rep" placeholder="ФИО, должность"></label>
+        <label>Город<input id="g_city"></label><label>Адрес<input id="g_addr"></label></div>
+      <div class="row"><label>Банк<input id="g_bank"></label><label>IBAN<input id="g_iban" placeholder="KZ… (20 символов)"></label><label>SWIFT/BIC<input id="g_swift" placeholder="HSBKKZKX"></label></div>
+      <div id="g_supplier" style="display:none;margin-top:8px"><b style="font-size:13px">Для поставщика</b>
+        <div class="row"><label>Обычный срок отгрузки, дней<input id="g_lead" type="number" value="14"></label></div>
+        <div class="note" style="margin-top:6px">Сертификаты</div><div class="checks">${MARKET.COMPLIANCE.filter(c=>c.id!=='shelf_75').map(c=>`<label><input type="checkbox" data-cert="${c.id}">${esc(c.ru)}</label>`).join('')}</div>
+        <div class="note">Экспортирует в</div><div class="checks">${routes.map(([k,r])=>`<label><input type="checkbox" data-exp="${k}">${esc(r.name_ru)}</label>`).join('')}</div></div>
+      <p class="note">БИН, IBAN и SWIFT проверяются по формату. Проверку существования счёта по IBAN можно будет подключить через банк-партнёр в системе Open Banking НПК.</p>
+      <p><button class="primary" id="g_save">Зарегистрировать</button></p></div>`;
   }
 
   /* ---------- рендер ---------- */
   function render(){
-    document.body.className = role==='buyer' ? 'as-buyer' : '';
+    const c = me();
+    document.body.className = c && c.role==='buyer' ? 'as-buyer' : '';
     $('dealref').textContent = DL() ? `${DL().deal.ref} · договор ${DL().contract.number}` : (W.rfqs.length ? W.rfqs[W.rfqs.length-1].ref : 'каталог');
-    document.querySelectorAll('#roles button').forEach(b => b.classList.toggle('on', b.dataset.role===role));
+    renderActing();
     document.querySelectorAll('#tabs button').forEach(b => { b.classList.toggle('on', b.dataset.tab===tab); b.classList.toggle('muted-tab', !!b.dataset.deal && !DL()); });
     renderTurn(); renderStats();
-    $('view').innerHTML = ({catalog:vCatalog, rfq:vRfq, contract:vContract, specs:vSpecs, payments:vPayments, transport:vTransport, timeline:vTimeline}[tab])();
+    $('view').innerHTML = ({catalog:vCatalog, rfq:vRfq, contract:vContract, specs:vSpecs, payments:vPayments, transport:vTransport, timeline:vTimeline, companies:vCompanies}[tab])();
   }
 
   /* ---------- события ---------- */
-  $('roles').onclick = e => { const r=e.target.dataset.role; if(r){ role=r; save(); render(); } };
+  $('acting').onchange = e => { acting = e.target.value; save(); render(); };
+  $('goReg').onclick = () => { tab='companies'; save(); render(); const p=$('regPanel'); if (p && p.scrollIntoView) p.scrollIntoView(); };
   $('tabs').onclick = e => { const t=e.target.dataset.tab; if(t){ tab=t; save(); render(); } };
-  $('reset').onclick = () => { if (confirm('Сбросить демо и начать заново с каталога?')) { W = MARKET.createWorkspace(SEED, nowIso()); role='buyer'; tab='catalog'; basket={}; window.__rf=null; save(); render(); toast('Демо сброшено'); } };
+  $('reset').onclick = () => { if (confirm('Сбросить демо и начать заново?')) { W = MARKET.createWorkspace(SEED, nowIso()); acting = W.companies.find(c=>c.role==='buyer').id; tab='catalog'; basket=[]; window.__rf=null; save(); render(); toast('Демо сброшено'); } };
 
   document.body.addEventListener('click', e => {
     const t = e.target, now = nowIso();
     if (t.dataset.goto) { tab = t.dataset.goto; save(); render(); return; }
+    if (t.dataset.actas) { acting = t.dataset.actas; save(); render(); toast('Вы действуете как «'+me().name+'»'); return; }
     if (t.dataset.doc){ ({contract:docContract, spec:()=>docSpec(t.dataset.id), inv:()=>docInv(t.dataset.id), cmr:()=>docCmr(t.dataset.id)})[t.dataset.doc](); return; }
-    if (t.id==='p_add') run(w => MARKET.addProduct(w, role, { name:$('p_name').value, hs:$('p_hs').value, price:$('p_price').value, unit:$('p_unit').value, moq:$('p_moq').value, shelf_life_months:$('p_shelf').value, compliance:['Декларация ЕАЭС'] }, now), 'Товар опубликован в каталоге');
-    if (t.id==='r_send') {
-      const items = Object.entries(basket).filter(([,b])=>b.qty>0).map(([id,b])=>({ product_id:id, qty:b.qty, specification:b.spec }));
+    if (t.dataset.basket) { const p = W.catalog.find(x=>x.id===t.dataset.basket); basket.push({ hs:p.hs, name:p.name, unit:p.unit, qty:Math.max(p.moq||0, 1000), target_price:'', specification:'', from_product:p.id }); save(); render(); return; }
+    if (t.dataset.unbasket) { basket = basket.filter(l => l.from_product !== t.dataset.unbasket); save(); render(); return; }
+    if (t.dataset.rmline !== undefined) { basket.splice(Number(t.dataset.rmline),1); save(); render(); return; }
+    if (t.id==='r_addhs') { const h = RULES.categories.bakery.hs_codes.find(x=>x.code===$('r_hs').value); basket.push({ hs:h.code, name:h.ru, unit:'кг', qty:1000, target_price:'', specification:'' }); save(); render(); return; }
+    if (t.id==='p_add') run(w => MARKET.addProduct(w, acting, { name:$('p_name').value, hs:$('p_hs').value, price:$('p_price').value, unit:$('p_unit').value, moq:$('p_moq').value, shelf_life_months:$('p_shelf').value }, now), 'Товар опубликован в каталоге');
+    if (t.id==='r_create') {
       const compliance = [...document.querySelectorAll('[data-comp]')].filter(x=>x.checked).map(x=>x.dataset.comp);
-      if (run(w => MARKET.createRFQ(w, role, { items, route:$('r_route').value, delivery_place:$('r_place').value, incoterms:$('r_inc').value, currency:$('r_cur').value, payment_preset:$('r_pay').value, delivery_date:$('r_del').value, offer_deadline:$('r_dead').value, compliance }, now), 'RFQ отправлен поставщику')) { basket={}; tab='rfq'; save(); render(); }
+      if (run(w => MARKET.createRFQ(w, acting, { lines: basket, route:$('r_route').value, delivery_place:$('r_place').value, incoterms:$('r_inc').value, currency:$('r_cur').value, payment_preset:$('r_pay').value, delivery_date:$('r_del').value, offer_deadline:$('r_dead').value, compliance }, now), 'Поставщики подобраны. Выберите, кому отправить запрос.')) { basket=[]; tab='rfq'; save(); render(); }
     }
-    if (t.dataset.offer) { const r = W.rfqs.find(x=>x.id===t.dataset.offer); const prices = r.items.map((_,k)=>Number($('o_p'+k).value));
-      run(w => MARKET.submitOffer(w, role, r.id, { prices, lead_time_days:$('o_lead').value, valid_until:$('o_valid').value, note:$('o_note').value }, now), 'Предложение отправлено покупателю'); }
-    if (t.dataset.decline) run(w => MARKET.declineRFQ(w, role, t.dataset.decline, $('o_reason').value, now), 'Запрос отклонён');
-    if (t.dataset.close) run(w => MARKET.closeRFQ(w, role, t.dataset.close, now), 'Запрос закрыт');
-    if (t.dataset.reject) run(w => MARKET.rejectOffer(w, role, t.dataset.reject, now), 'Предложение отклонено, запрос снова открыт');
-    if (t.dataset.accept) { if (run(w => MARKET.acceptOffer(w, role, t.dataset.accept, now), 'Сделка создана: договор собран из RFQ и предложения')) { tab='contract'; save(); render(); } }
+    if (t.dataset.send) { const ids = [...document.querySelectorAll('[data-pick]')].filter(x=>x.checked).map(x=>x.dataset.pick); run(w => MARKET.sendRFQ(w, acting, t.dataset.send, ids, now), 'Запрос отправлен выбранным поставщикам'); }
+    if (t.dataset.offer) { const r = W.rfqs.find(x=>x.id===t.dataset.offer);
+      run(w => MARKET.submitOffer(w, acting, r.id, { product_ids: r.lines.map((_,k)=>$('o_prod'+k).value), prices: r.lines.map((_,k)=>Number($('o_p'+k).value)), lead_time_days:$('o_lead').value, valid_until:$('o_valid').value, note:$('o_note').value }, now), 'Предложение отправлено покупателю'); }
+    if (t.dataset.decline) run(w => MARKET.declineRFQ(w, acting, t.dataset.decline, $('o_reason').value, now), 'Вы отказались от запроса');
+    if (t.dataset.close) run(w => MARKET.closeRFQ(w, acting, t.dataset.close, now), 'Запрос закрыт');
+    if (t.dataset.reject) run(w => MARKET.rejectOffer(w, acting, t.dataset.reject, now), 'Предложение отклонено');
+    if (t.dataset.accept) { if (run(w => MARKET.acceptOffer(w, acting, t.dataset.accept, now), 'Сделка создана: договор собран из RFQ и предложения')) { tab='contract'; save(); render(); } }
+    if (t.id==='g_save') {
+      const p = { role:$('g_role').value, name:$('g_name').value, country:$('g_country').value, reg:$('g_reg').value, email:$('g_email').value, rep:$('g_rep').value,
+        city:$('g_city').value, address:$('g_addr').value, bank:$('g_bank').value, iban:$('g_iban').value, swift:$('g_swift').value, lead_time_days:$('g_lead').value,
+        certs:[...document.querySelectorAll('[data-cert]')].filter(x=>x.checked).map(x=>x.dataset.cert), export_to:[...document.querySelectorAll('[data-exp]')].filter(x=>x.checked).map(x=>x.dataset.exp) };
+      if (run(w => MARKET.registerCompany(w, p, now))) { acting = W.companies[W.companies.length-1].id; tab = p.role==='supplier' ? 'catalog' : 'catalog'; save(); render(); toast('Компания зарегистрирована. Вы действуете от её имени.'); }
+    }
     const a = t.dataset.act, id = t.dataset.id;
-    if (a==='approve_contract') run(w => MARKET.approveContract(w, role, now), 'Договор согласован с вашей стороны');
-    if (a==='approve_spec') deal(s=>DEAL.approveSpec(s, role, id, now), 'Спецификация согласована');
-    if (a==='pay') { const ref=$('ref_'+t.dataset.i).value; deal(s=>DEAL.markPaymentSent(s, role, id, { bank_reference: ref }, now), 'Оплата отмечена. Поставщик увидит её у себя.'); }
-    if (a==='confirm_payment') deal(s=>DEAL.confirmPayment(s, role, id, now), 'Поступление подтверждено и сверено со счётом');
-    if (a==='ship') { const v=$('veh_'+t.dataset.i).value; deal(s=>DEAL.issueCMR(s, role, id, { vehicle: v }, now), 'CMR выписана, груз в пути'); }
-    if (a==='deliver') deal(s=>DEAL.confirmDelivery(s, role, id, now), 'Получение подтверждено');
+    if (a==='approve_contract') run(w => MARKET.approveContract(w, acting, now), 'Договор согласован с вашей стороны');
+    if (a==='approve_spec') deal((s, role)=>DEAL.approveSpec(s, role, id, now), 'Спецификация согласована');
+    if (a==='pay') { const ref=$('ref_'+t.dataset.i).value; deal((s, role)=>DEAL.markPaymentSent(s, role, id, { bank_reference: ref }, now), 'Оплата отмечена. Поставщик увидит её у себя.'); }
+    if (a==='confirm_payment') deal((s, role)=>DEAL.confirmPayment(s, role, id, now), 'Поступление подтверждено и сверено со счётом');
+    if (a==='ship') { const v=$('veh_'+t.dataset.i).value; deal((s, role)=>DEAL.issueCMR(s, role, id, { vehicle: v }, now), 'CMR выписана, груз в пути'); }
+    if (a==='deliver') deal((s, role)=>DEAL.confirmDelivery(s, role, id, now), 'Получение подтверждено');
   });
   document.body.addEventListener('change', e => {
     const t = e.target;
-    if (t.dataset.qty) { const b = basket[t.dataset.qty] || (basket[t.dataset.qty] = { qty:0, spec:'' }); b.qty = Number(t.value)||0; render(); }
-    if (t.dataset.specfor) { const b = basket[t.dataset.specfor] || (basket[t.dataset.specfor] = { qty:0, spec:'' }); b.spec = t.value; }
-    if (t.id==='r_route' || t.id==='r_inc') { window.__rf = { route:$('r_route').value, inc:$('r_inc').value }; $('r_docs').innerHTML = '<b>Documents</b> (по правилам маршрута, уйдут в договор и спецификацию): ' + esc(MARKET.defaultDocuments(W, window.__rf.route, window.__rf.inc).join('; ')); }
+    if (t.dataset.line !== undefined) { const l = basket[Number(t.dataset.line)]; l[t.dataset.f] = t.dataset.f==='specification' ? t.value : (Number(t.value)||''); save(); return; }
+    if (t.id==='r_route' || t.id==='r_inc') { window.__rf = { route:$('r_route').value, inc:$('r_inc').value }; $('r_docs').innerHTML = '<b>Documents</b> (по правилам маршрута): ' + esc(MARKET.defaultDocuments(window.__rf.route, window.__rf.inc).join('; ')); }
+    if (t.id==='g_role') { $('g_supplier').style.display = t.value==='supplier' ? '' : 'none'; }
   });
 
   render();
